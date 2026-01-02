@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Новое домашнее задание</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .content {
+            padding: 30px 20px;
+        }
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            margin: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 Новое задание</h1>
+        </div>
+
+        <div class="content">
+            <p>Здравствуйте, <strong th:text="${studentName}">Студент</strong>!</p>
+
+            <p>Для вас назначено новое домашнее задание:</p>
+
+            <div class="info-box">
+                <p><strong>Урок:</strong> <span th:text="${lessonTitle}">Название урока</span></p>
+                <p><strong>Задание:</strong> <span th:text="${homeworkTitle}">Название задания</span></p>
+                <p><strong>Срок сдачи:</strong> <span th:text="${dueDate}">01.01.2025</span></p>
+            </div>
+
+            <div style="text-align: center;">
+                <a th:href="${frontendUrl} + '/student/homework'" class="button">Перейти к заданиям</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 CRM LMS. Все права защищены.</p>
+        </div>
+    </div>
+</body>
+</html>

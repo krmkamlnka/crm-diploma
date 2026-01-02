@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Приглашение на платформу</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px 20px;
+        }
+        .content h2 {
+            color: #667eea;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 5px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            margin: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+        .divider {
+            border: 0;
+            height: 1px;
+            background: #e0e0e0;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 CRM LMS</h1>
+        </div>
+
+        <div class="content">
+            <h2>Вас пригласили на платформу!</h2>
+
+            <p>Здравствуйте!</p>
+
+            <p><strong th:text="${inviterName}">Администратор</strong> пригласил вас присоединиться к платформе <strong>CRM LMS</strong>.</p>
+
+            <div class="info-box">
+                <p><strong>Email для регистрации:</strong> <span th:text="${email}">your@email.com</span></p>
+                <p><strong>Назначенная роль:</strong> <span th:text="${role}">STUDENT</span></p>
+            </div>
+
+            <p>Нажмите на кнопку ниже, чтобы завершить регистрацию:</p>
+
+            <div style="text-align: center;">
+                <a th:href="${registrationUrl}" class="button">Зарегистрироваться</a>
+            </div>
+
+            <hr class="divider">
+
+            <p style="font-size: 14px; color: #6c757d;">
+                Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:<br>
+                <a th:href="${registrationUrl}" th:text="${registrationUrl}" style="color: #667eea; word-break: break-all;">registration link</a>
+            </p>
+
+            <p style="font-size: 14px; color: #6c757d;">
+                <strong>Важно:</strong> Приглашение действительно в течение 7 дней.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Это автоматическое сообщение, пожалуйста, не отвечайте на него.</p>
+            <p>&copy; 2025 CRM LMS. Все права защищены.</p>
+        </div>
+    </div>
+</body>
+</html>

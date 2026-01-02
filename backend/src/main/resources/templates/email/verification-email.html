@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подтверждение email</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px 20px;
+        }
+        .content h2 {
+            color: #667eea;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            margin: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+        .divider {
+            border: 0;
+            height: 1px;
+            background: #e0e0e0;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 CRM LMS</h1>
+        </div>
+
+        <div class="content">
+            <h2>Добро пожаловать, <span th:text="${firstName}">Пользователь</span>!</h2>
+
+            <p>Спасибо за регистрацию в системе CRM LMS. Для завершения регистрации, пожалуйста, подтвердите ваш email адрес.</p>
+
+            <p>Нажмите на кнопку ниже, чтобы подтвердить ваш email:</p>
+
+            <div style="text-align: center;">
+                <a th:href="${verificationUrl}" class="button">Подтвердить Email</a>
+            </div>
+
+            <hr class="divider">
+
+            <p style="font-size: 14px; color: #6c757d;">
+                Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:<br>
+                <a th:href="${verificationUrl}" th:text="${verificationUrl}" style="color: #667eea; word-break: break-all;">verification link</a>
+            </p>
+
+            <p style="font-size: 14px; color: #6c757d;">
+                <strong>Важно:</strong> Ссылка действительна в течение 24 часов.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Это автоматическое сообщение, пожалуйста, не отвечайте на него.</p>
+            <p>&copy; 2025 CRM LMS. Все права защищены.</p>
+        </div>
+    </div>
+</body>
+</html>
