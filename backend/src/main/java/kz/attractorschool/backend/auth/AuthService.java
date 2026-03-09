@@ -4,19 +4,25 @@ import kz.attractorschool.backend.auth.dto.AuthResponse;
 import kz.attractorschool.backend.auth.dto.LoginRequest;
 import kz.attractorschool.backend.auth.dto.RefreshTokenRequest;
 import kz.attractorschool.backend.auth.dto.RegisterRequest;
+import kz.attractorschool.backend.auth.dto.VerifyEmailRequest;
+import kz.attractorschool.backend.security.CustomUserDetails;
 import kz.attractorschool.backend.security.JwtTokenProvider;
 import kz.attractorschool.backend.shared.email.EmailService;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
 import kz.attractorschool.backend.user.UserStatus;
+import kz.attractorschool.backend.user.dto.UserDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -34,18 +40,22 @@ public class AuthService {
 
     /**
      * Регистрация нового пользователя
+     * Не возвращает токены, только создает пользователя и отправляет код верификации
      *
      * @param request Данные для регистрации
-     * @return AuthResponse с токенами
+     * @return Сообщение о необходимости верификации
      */
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public Map<String, String> register(RegisterRequest request) {
         log.info("Регистрация нового пользователя: {}", request.getEmail());
 
         // Проверка существования пользователя
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Пользователь с таким email уже существует");
         }
+
+        // Генерация 6-значного кода верификации
+        String verificationCode = String.format("%06d", (int)(Math.random() * 1000000));
 
         // Создание нового пользователя
         User user = User.builder()
@@ -57,14 +67,14 @@ public class AuthService {
                 .role(request.getRole() != null ? request.getRole() : UserRole.STUDENT)
                 .status(UserStatus.ACTIVE)
                 .isEmailVerified(false)
-                .emailVerificationToken(UUID.randomUUID().toString())
+                .emailVerificationToken(verificationCode)
                 .emailVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
         user = userRepository.save(user);
         log.info("Пользователь успешно зарегистрирован с ID: {}", user.getId());
 
-        // Отправить email с токеном верификации
+        // Отправить email с кодом верификации
         emailService.sendVerificationEmail(
                 user.getEmail(),
                 user.getFirstName(),
@@ -72,11 +82,10 @@ public class AuthService {
         );
         log.info("Email верификации отправлен на: {}", user.getEmail());
 
-        // Генерация токенов
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-
-        return buildAuthResponse(user, accessToken, refreshToken);
+        return Map.of(
+                "email", user.getEmail(),
+                "message", "Код верификации отправлен на ваш email"
+        );
     }
 
     /**
@@ -149,29 +158,72 @@ public class AuthService {
     }
 
     /**
-     * Верификация email пользователя
+     * Верификация email пользователя по коду
      *
-     * @param token Токен верификации
+     * @param request Email и код верификации
+     * @return AuthResponse с токенами после успешной верификации
      */
     @Transactional
-    public void verifyEmail(String token) {
-        log.info("Верификация email по токену: {}", token);
+    public AuthResponse verifyEmail(VerifyEmailRequest request) {
+        log.info("Верификация email по коду для: {}", request.getEmail());
 
-        User user = userRepository.findByEmailVerificationToken(token)
-                .orElseThrow(() -> new RuntimeException("Невалидный токен верификации"));
+        // Найти пользователя по email
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        // Проверить, что email еще не верифицирован
+        if (user.getIsEmailVerified()) {
+            throw new RuntimeException("Email уже верифицирован");
+        }
+
+        // Проверить код верификации
+        if (!request.getVerificationCode().equals(user.getEmailVerificationToken())) {
+            throw new RuntimeException("Неверный код верификации");
+        }
 
         // Проверка срока действия токена
         if (user.getEmailVerificationTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Токен верификации истек");
+            throw new RuntimeException("Код верификации истек");
         }
 
         // Верификация email
         user.setIsEmailVerified(true);
         user.setEmailVerificationToken(null);
         user.setEmailVerificationTokenExpiresAt(null);
-        userRepository.save(user);
+        user = userRepository.save(user);
 
         log.info("Email успешно верифицирован для пользователя: {}", user.getEmail());
+
+        // Генерация токенов для автоматического входа после верификации
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
+
+        return buildAuthResponse(user, accessToken, refreshToken);
+    }
+
+    /**
+     * Получить информацию о текущем аутентифицированном пользователе
+     *
+     * @return UserDTO с информацией о пользователе
+     */
+    @Transactional(readOnly = true)
+    public UserDTO getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new RuntimeException("Пользователь не аутентифицирован");
+        }
+
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof CustomUserDetails)) {
+            throw new RuntimeException("Неверный тип Principal");
+        }
+
+        CustomUserDetails userDetails = (CustomUserDetails) principal;
+        User user = userDetails.getUser();
+
+        log.info("Получение информации о текущем пользователе: {}", user.getEmail());
+        return UserDTO.fromEntity(user);
     }
 
     /**
@@ -181,11 +233,7 @@ public class AuthService {
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
-                .userId(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFirstName() + " " + user.getLastName())
-                .role(user.getRole())
-                .isEmailVerified(user.getIsEmailVerified())
+                .user(UserDTO.fromEntity(user))
                 .build();
     }
 }

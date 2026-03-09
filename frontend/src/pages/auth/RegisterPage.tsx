@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
 import { UserPlus } from 'lucide-react'
+import EmailVerificationModal from '../../components/auth/EmailVerificationModal'
 
 export default function RegisterPage() {
+  const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -15,7 +17,32 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
 
   const navigate = useNavigate()
-  const { register, isLoading } = useAuthStore()
+  const { register, verifyEmail, isLoading, isAuthenticated, pendingVerificationEmail, setPendingVerificationEmail } = useAuthStore()
+
+  // Auto-fill invitation token from URL
+  useEffect(() => {
+    const tokenFromUrl = searchParams.get('token')
+    if (tokenFromUrl) {
+      console.log('[RegisterPage] Auto-filling invitation token from URL:', tokenFromUrl)
+      setFormData(prev => ({
+        ...prev,
+        invitationCode: tokenFromUrl
+      }))
+    }
+  }, [searchParams])
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('[RegisterPage] User already authenticated, redirecting to /')
+      navigate('/', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
+  // Debug: отслеживаем изменения состояния модалки
+  useEffect(() => {
+    console.log('pendingVerificationEmail changed to:', pendingVerificationEmail)
+  }, [pendingVerificationEmail])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -28,6 +55,11 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
 
+    if (!formData.invitationCode.trim()) {
+      setError('Код приглашения обязателен для регистрации')
+      return
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Пароли не совпадают')
       return
@@ -39,11 +71,31 @@ export default function RegisterPage() {
     }
 
     try {
-      await register(formData)
-      navigate('/login')
-    } catch (err) {
-      setError('Ошибка при регистрации. Проверьте код приглашения.')
+      console.log('Sending registration request...', formData)
+      const response = await register(formData)
+      console.log('Registration response:', response)
+
+      // Сохраняем email в глобальный стор
+      console.log('Setting pendingVerificationEmail to:', response.email)
+      setPendingVerificationEmail(response.email)
+    } catch (err: any) {
+      console.error('Registration error:', err)
+      const errorMessage = err.response?.data?.message || 'Ошибка при регистрации. Проверьте код приглашения.'
+      setError(errorMessage)
     }
+  }
+
+  const handleVerifyEmail = async (code: string) => {
+    if (!pendingVerificationEmail) return
+    await verifyEmail(pendingVerificationEmail, code)
+    setPendingVerificationEmail(null)
+    // Navigation will be handled by role-based redirect in App.tsx
+    navigate('/')
+  }
+
+  const handleCloseModal = () => {
+    setPendingVerificationEmail(null)
+    navigate('/login')
   }
 
   return (
@@ -67,7 +119,7 @@ export default function RegisterPage() {
 
             <div>
               <label htmlFor="invitationCode" className="block text-sm font-medium text-gray-700 mb-2">
-                Код приглашения
+                Код приглашения <span className="text-red-500">*</span>
               </label>
               <input
                 id="invitationCode"
@@ -79,6 +131,9 @@ export default function RegisterPage() {
                 placeholder="Введите код из письма"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Регистрация доступна только по приглашению
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -178,6 +233,13 @@ export default function RegisterPage() {
           </form>
         </div>
       </div>
+
+      <EmailVerificationModal
+        isOpen={!!pendingVerificationEmail}
+        email={pendingVerificationEmail || ''}
+        onVerify={handleVerifyEmail}
+        onClose={handleCloseModal}
+      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
 import { LogIn } from 'lucide-react'
@@ -9,7 +9,15 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   const navigate = useNavigate()
-  const { login, isLoading } = useAuthStore()
+  const { login, isLoading, isAuthenticated } = useAuthStore()
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('[LoginPage] User already authenticated, redirecting to /')
+      navigate('/', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -17,9 +25,12 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
-      navigate('/')
-    } catch (err) {
-      setError('Неверный email или пароль')
+      // After successful login, user is already in the store
+      // Just navigate and let React re-render with the new state
+      navigate('/', { replace: true })
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Неверный email или пароль'
+      setError(errorMessage)
     }
   }
 
@@ -88,14 +99,6 @@ export default function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-semibold text-blue-900 mb-2">Для тестирования (любой пароль):</p>
-            <div className="space-y-1 text-xs text-blue-800">
-              <p><strong>Админ:</strong> admin@test.com</p>
-              <p><strong>Преподаватель:</strong> instructor@test.com</p>
-              <p><strong>Студент:</strong> student@test.com</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

@@ -12,6 +12,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
  * Конфигурация Spring Security
@@ -33,8 +38,8 @@ public class SecurityConfig {
                 // Отключаем CSRF для REST API (stateless)
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Отключаем CORS (настроим отдельно если нужно)
-                .cors(AbstractHttpConfigurer::disable)
+                // Включаем CORS с настройками
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
                 // Настройка сессий - stateless (без сессий)
                 .sessionManagement(session -> session
@@ -68,5 +73,35 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(10);
+    }
+
+    /**
+     * Настройка CORS для поддержки cookie-based аутентификации
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        // Разрешить запросы с фронтенда (localhost:5173 для Vite dev server)
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000"
+        ));
+
+        // Разрешить все HTTP методы
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+
+        // Разрешить все заголовки
+        configuration.setAllowedHeaders(List.of("*"));
+
+        // Разрешить отправку cookies и авторизационных заголовков
+        configuration.setAllowCredentials(true);
+
+        // Разрешить фронтенду читать эти заголовки из ответа
+        configuration.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }

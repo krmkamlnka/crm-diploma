@@ -1,14 +1,19 @@
 import { create } from 'zustand'
 import { AuthState, User } from '../types'
+import { authService, LoginRequest, RegisterRequest, VerifyEmailRequest } from '../services/authService'
 
 interface AuthStore extends AuthState {
   setUser: (user: User | null) => void
   login: (email: string, password: string) => Promise<void>
-  logout: () => void
-  register: (data: RegisterData) => Promise<void>
+  logout: () => Promise<void>
+  register: (data: RegisterData) => Promise<{ email: string; message: string }>
+  verifyEmail: (email: string, code: string) => Promise<void>
+  checkAuth: () => Promise<void>
+  pendingVerificationEmail: string | null
+  setPendingVerificationEmail: (email: string | null) => void
 }
 
-interface RegisterData {
+export interface RegisterData {
   email: string
   password: string
   firstName: string
@@ -20,69 +25,106 @@ export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
+  pendingVerificationEmail: null,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
 
+  setPendingVerificationEmail: (email) => set({ pendingVerificationEmail: email }),
+
   login: async (email: string, password: string) => {
+    console.log('[AuthStore] Starting login...')
     set({ isLoading: true })
     try {
-      // TODO: Replace with actual API call
-      console.log('Login:', email, password)
+      const loginData: LoginRequest = { email, password }
+      const response = await authService.login(loginData)
 
-      // Mock user for development - role based on email
-      let role: 'super_admin' | 'admin' | 'instructor' | 'student' = 'student'
-      let firstName = 'Студент'
-      let lastName = 'Тестовый'
+      console.log('[AuthStore] Login successful, user:', response.user)
+      console.log('[AuthStore] Setting user in store...')
 
-      if (email.includes('admin')) {
-        role = 'admin'
-        firstName = 'Админ'
-        lastName = 'Системный'
-      } else if (email.includes('instructor') || email.includes('teacher')) {
-        role = 'instructor'
-        firstName = 'Преподаватель'
-        lastName = 'Тестовый'
-      } else {
-        role = 'student'
-        firstName = 'Студент'
-        lastName = 'Тестовый'
-      }
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false
+      })
 
-      const mockUser: User = {
-        id: '1',
-        email,
-        firstName,
-        lastName,
-        role,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isEmailVerified: true,
-      }
-
-      set({ user: mockUser, isAuthenticated: true, isLoading: false })
+      console.log('[AuthStore] User set in store, isAuthenticated:', true)
     } catch (error) {
-      console.error('Login error:', error)
+      console.error('[AuthStore] Login error:', error)
       set({ isLoading: false })
       throw error
     }
   },
 
-  logout: () => {
-    // TODO: Call API to invalidate token
-    set({ user: null, isAuthenticated: false })
+  logout: async () => {
+    try {
+      await authService.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      set({ user: null, isAuthenticated: false })
+    }
   },
 
   register: async (data: RegisterData) => {
     set({ isLoading: true })
     try {
-      // TODO: Replace with actual API call
-      console.log('Register:', data)
+      const registerData: RegisterRequest = {
+        email: data.email,
+        password: data.password,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        invitationToken: data.invitationCode || undefined,
+      }
 
+      console.log('AuthStore: Sending register request with data:', registerData)
+      const response = await authService.register(registerData)
+      console.log('AuthStore: Received register response:', response)
       set({ isLoading: false })
+
+      return {
+        email: response.email,
+        message: response.message,
+      }
     } catch (error) {
-      console.error('Registration error:', error)
+      console.error('AuthStore: Registration error:', error)
       set({ isLoading: false })
       throw error
+    }
+  },
+
+  verifyEmail: async (email: string, code: string) => {
+    set({ isLoading: true })
+    try {
+      const verifyData: VerifyEmailRequest = {
+        email,
+        verificationCode: code,
+      }
+
+      const response = await authService.verifyEmail(verifyData)
+
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false
+      })
+    } catch (error) {
+      console.error('Email verification error:', error)
+      set({ isLoading: false })
+      throw error
+    }
+  },
+
+  checkAuth: async () => {
+    console.log('[AuthStore] checkAuth called')
+    set({ isLoading: true })
+    try {
+      console.log('[AuthStore] Fetching current user from /auth/me...')
+      const user = await authService.getCurrentUser()
+      console.log('[AuthStore] checkAuth success, user:', user)
+      set({ user, isAuthenticated: true, isLoading: false })
+    } catch (error) {
+      console.log('[AuthStore] checkAuth failed:', error)
+      set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },
 }))

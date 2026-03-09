@@ -87,19 +87,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Извлечь JWT токен из Authorization header
-     * Формат: "Authorization: Bearer <token>"
+     * Извлечь JWT токен из Authorization header или cookies
+     * Приоритет: 1) Authorization header, 2) accessToken cookie
      *
      * @param request HTTP запрос
      * @return JWT токен или null
      */
     private String extractJwtFromRequest(HttpServletRequest request) {
+        // 1. Попробовать получить из Authorization header
         String bearerToken = request.getHeader("Authorization");
-
-        // Проверить, что header существует и начинается с "Bearer "
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            // Вернуть токен без префикса "Bearer "
             return bearerToken.substring(7);
+        }
+
+        // 2. Попробовать получить из cookies
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (jakarta.servlet.http.Cookie cookie : cookies) {
+                if ("accessToken".equals(cookie.getName())) {
+                    String token = cookie.getValue();
+                    if (StringUtils.hasText(token)) {
+                        return token;
+                    }
+                }
+            }
         }
 
         return null;

@@ -1,3 +1,4 @@
+-- Таблица домашних заданий
 CREATE TABLE homework (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
@@ -16,5 +17,6 @@ CREATE TABLE homework (
 CREATE INDEX idx_homework_lesson_id ON homework(lesson_id);
 CREATE INDEX idx_homework_due_date ON homework(due_date);
 
+-- Комментарии
 COMMENT ON TABLE homework IS 'Домашние задания';
-COMMENT ON COLUMN homework.task_file_url IS 'URL файла задания в S3';
+COMMENT ON COLUMN homework.task_file_url IS 'URL файла задания в MinIO';

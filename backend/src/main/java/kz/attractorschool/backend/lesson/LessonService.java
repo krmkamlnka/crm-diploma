@@ -33,6 +33,8 @@ public class LessonService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final kz.attractorschool.backend.material.MaterialRepository materialRepository;
+    private final kz.attractorschool.backend.homework.HomeworkRepository homeworkRepository;
+    private final kz.attractorschool.backend.attendance.AttendanceRepository attendanceRepository;
 
     private static final int CONFLICT_WINDOW_HOURS = 2;
 
@@ -240,6 +242,8 @@ public class LessonService {
 
     private LessonResponse mapToResponse(Lesson lesson) {
         long materialsCount = materialRepository.countByLessonId(lesson.getId());
+        boolean hasHomework = homeworkRepository.existsByLessonId(lesson.getId());
+        long attendanceCount = attendanceRepository.countByLessonId(lesson.getId());
 
         return LessonResponse.builder()
                 .id(lesson.getId())
@@ -254,9 +258,9 @@ public class LessonService {
                 .recordingUrl(lesson.getRecordingUrl())
                 .status(lesson.getStatus())
                 .materialsCount((int) materialsCount)
-                .hasHomework(false) // TODO: Implement when Homework module is ready
-                .attendanceCount(0) // TODO: Implement when Attendance module is ready
-                .totalStudents(0)   // TODO: Get from course.enrolledStudents
+                .hasHomework(hasHomework)
+                .attendanceCount((int) attendanceCount)
+                .totalStudents(lesson.getCourse().getEnrolledStudents() != null ? lesson.getCourse().getEnrolledStudents() : 0)
                 .createdAt(lesson.getCreatedAt())
                 .updatedAt(lesson.getUpdatedAt())
                 .build();

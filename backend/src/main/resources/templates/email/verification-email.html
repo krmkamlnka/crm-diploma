@@ -39,19 +39,18 @@
             font-size: 20px;
             margin-top: 0;
         }
-        .button {
+        .verification-code {
             display: inline-block;
-            padding: 14px 30px;
+            padding: 20px 40px;
             margin: 20px 0;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #ffffff;
-            text-decoration: none;
-            border-radius: 6px;
+            font-size: 32px;
             font-weight: bold;
-            transition: transform 0.2s;
-        }
-        .button:hover {
-            transform: translateY(-2px);
+            letter-spacing: 8px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
         .footer {
             background: #f8f9fa;
@@ -80,21 +79,20 @@
 
             <p>Спасибо за регистрацию в системе CRM LMS. Для завершения регистрации, пожалуйста, подтвердите ваш email адрес.</p>
 
-            <p>Нажмите на кнопку ниже, чтобы подтвердить ваш email:</p>
+            <p>Введите этот код в окне подтверждения на сайте:</p>
 
             <div style="text-align: center;">
-                <a th:href="${verificationUrl}" class="button">Подтвердить Email</a>
+                <div class="verification-code" th:text="${verificationCode}">123456</div>
             </div>
 
             <hr class="divider">
 
-            <p style="font-size: 14px; color: #6c757d;">
-                Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:<br>
-                <a th:href="${verificationUrl}" th:text="${verificationUrl}" style="color: #667eea; word-break: break-all;">verification link</a>
+            <p style="font-size: 14px; color: #6c757d; text-align: center;">
+                Скопируйте код и вставьте его в форму на сайте для подтверждения вашего email.
             </p>
 
             <p style="font-size: 14px; color: #6c757d;">
-                <strong>Важно:</strong> Ссылка действительна в течение 24 часов.
+                <strong>Важно:</strong> Код действителен в течение 24 часов.
             </p>
         </div>
 

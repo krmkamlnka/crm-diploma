@@ -21,6 +21,7 @@ import java.util.Map;
  */
 @Service
 @Slf4j
+@org.springframework.context.annotation.Lazy
 public class EmailService {
 
     private final JavaMailSender mailSender;
@@ -93,13 +94,15 @@ public class EmailService {
             log.error("❌ MessagingException while sending email to: {}", to);
             log.error("Error message: {}", e.getMessage());
             log.error("Stack trace:", e);
-            throw new RuntimeException("Не удалось отправить email: " + e.getMessage(), e);
+            // Не выбрасываем исключение в асинхронном методе - просто логируем ошибку
+            log.error("Email не был отправлен из-за ошибки подключения к SMTP");
         } catch (Exception e) {
             log.error("❌ Unexpected error sending email to: {}", to);
             log.error("Error type: {}", e.getClass().getName());
             log.error("Error message: {}", e.getMessage());
             log.error("Stack trace:", e);
-            throw new RuntimeException("Ошибка при отправке email: " + e.getMessage(), e);
+            // Не выбрасываем исключение в асинхронном методе - просто логируем ошибку
+            log.error("Email не был отправлен из-за неожиданной ошибки");
         }
     }
 
@@ -107,12 +110,10 @@ public class EmailService {
      * Отправить email верификации пользователю
      */
     @Async
-    public void sendVerificationEmail(String to, String firstName, String verificationToken) {
-        String verificationUrl = frontendUrl + "/verify-email?token=" + verificationToken;
-
+    public void sendVerificationEmail(String to, String firstName, String verificationCode) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", firstName);
-        variables.put("verificationUrl", verificationUrl);
+        variables.put("verificationCode", verificationCode);
 
         sendTemplatedEmail(to, "Подтвердите ваш email", "verification-email", variables);
     }
@@ -127,6 +128,7 @@ public class EmailService {
         Map<String, Object> variables = new HashMap<>();
         variables.put("email", to);
         variables.put("role", role);
+        variables.put("invitationToken", invitationToken);
         variables.put("registrationUrl", registrationUrl);
         variables.put("inviterName", inviterName);
 

@@ -1,3 +1,4 @@
+-- Таблица приглашений новых пользователей
 CREATE TABLE invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) NOT NULL,
@@ -14,4 +15,5 @@ CREATE INDEX idx_invitations_email ON invitations(email);
 CREATE INDEX idx_invitations_token ON invitations(token);
 CREATE INDEX idx_invitations_invited_by ON invitations(invited_by);
 
+-- Комментарии
 COMMENT ON TABLE invitations IS 'Приглашения новых пользователей';

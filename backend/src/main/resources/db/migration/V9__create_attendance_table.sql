@@ -1,5 +1,7 @@
+-- Создание enum типа для статуса посещаемости
 CREATE TYPE attendance_status AS ENUM ('PRESENT', 'ABSENT', 'LATE', 'EXCUSED');
 
+-- Таблица посещаемости занятий
 CREATE TABLE attendance (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
@@ -17,5 +19,6 @@ CREATE INDEX idx_attendance_lesson_id ON attendance(lesson_id);
 CREATE INDEX idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX idx_attendance_status ON attendance(status);
 
+-- Комментарии
 COMMENT ON TABLE attendance IS 'Посещаемость занятий';
 COMMENT ON COLUMN attendance.status IS 'Статус: PRESENT, ABSENT, LATE, EXCUSED';

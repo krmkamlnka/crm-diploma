@@ -1,5 +1,7 @@
+-- Создание enum типа для периодичности платежей
 CREATE TYPE payment_frequency AS ENUM ('ONE_TIME', 'MONTHLY', 'QUARTERLY');
 
+-- Таблица правил автоматической генерации платежей
 CREATE TABLE payment_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -18,5 +20,6 @@ CREATE TABLE payment_rules (
 CREATE INDEX idx_payment_rules_course_id ON payment_rules(course_id);
 CREATE INDEX idx_payment_rules_is_active ON payment_rules(is_active);
 
+-- Комментарии
 COMMENT ON TABLE payment_rules IS 'Правила автоматической генерации платежей';
 COMMENT ON COLUMN payment_rules.frequency IS 'Периодичность: ONE_TIME, MONTHLY, QUARTERLY';

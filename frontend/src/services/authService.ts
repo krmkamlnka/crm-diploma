@@ -11,12 +11,23 @@ export interface RegisterRequest {
   password: string
   firstName: string
   lastName: string
-  invitationCode: string
+  invitationToken?: string // invitation token (optional)
+}
+
+export interface VerifyEmailRequest {
+  email: string
+  verificationCode: string
 }
 
 export interface AuthResponse {
-  token: string
+  accessToken: string
+  refreshToken: string
   user: User
+}
+
+export interface RegisterResponse {
+  message: string
+  email: string
 }
 
 export const authService = {
@@ -25,8 +36,13 @@ export const authService = {
     return response.data
   },
 
-  register: async (data: RegisterRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/auth/register', data)
+  register: async (data: RegisterRequest): Promise<RegisterResponse> => {
+    const response = await api.post<RegisterResponse>('/auth/register', data)
+    return response.data
+  },
+
+  verifyEmail: async (data: VerifyEmailRequest): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/verify-email', data)
     return response.data
   },
 
@@ -39,7 +55,8 @@ export const authService = {
     return response.data
   },
 
-  verifyEmail: async (code: string): Promise<void> => {
-    await api.post('/auth/verify-email', { code })
+  refreshToken: async (): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/refresh')
+    return response.data
   },
 }

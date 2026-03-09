@@ -36,8 +36,19 @@ import PaymentsPage from './pages/student/PaymentsPage'
 import StudentSettingsPage from './pages/student/SettingsPage'
 
 function App() {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated, user, checkAuth, isLoading } = useAuthStore()
   const { theme } = useThemeStore()
+
+  // Check authentication status on app mount (only if not already authenticated)
+  useEffect(() => {
+    console.log('[App] useEffect triggered, isAuthenticated:', isAuthenticated, 'user:', user?.email)
+    if (!isAuthenticated && !user) {
+      console.log('[App] User not authenticated, calling checkAuth()')
+      checkAuth()
+    } else {
+      console.log('[App] User already authenticated, skipping checkAuth()')
+    }
+  }, [checkAuth, isAuthenticated])
 
   // Apply theme to document on mount and when theme changes
   useEffect(() => {
@@ -47,6 +58,15 @@ function App() {
       document.documentElement.classList.remove('dark')
     }
   }, [theme])
+
+  // Show loading spinner while checking auth
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary-600 border-t-transparent"></div>
+      </div>
+    )
+  }
 
   const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
     if (!isAuthenticated) {

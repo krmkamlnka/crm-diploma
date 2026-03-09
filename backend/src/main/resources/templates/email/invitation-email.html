@@ -97,18 +97,27 @@
                 <p><strong>Назначенная роль:</strong> <span th:text="${role}">STUDENT</span></p>
             </div>
 
-            <p>Нажмите на кнопку ниже, чтобы завершить регистрацию:</p>
+            <p>Нажмите на кнопку ниже, чтобы начать регистрацию. Код приглашения будет автоматически заполнен:</p>
 
-            <div style="text-align: center;">
-                <a th:href="${registrationUrl}" class="button">Зарегистрироваться</a>
+            <div style="text-align: center; margin: 30px 0;">
+                <a th:href="${registrationUrl}" class="button" style="font-size: 16px; color: white">
+                    📝 Зарегистрироваться
+                </a>
             </div>
 
             <hr class="divider">
 
-            <p style="font-size: 14px; color: #6c757d;">
-                Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:<br>
-                <a th:href="${registrationUrl}" th:text="${registrationUrl}" style="color: #667eea; word-break: break-all;">registration link</a>
-            </p>
+            <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #6c757d;">
+                    <strong>Если кнопка не работает:</strong>
+                </p>
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #333;">
+                    1. Скопируйте эту ссылку: <a th:href="${registrationUrl}" th:text="${registrationUrl}" style="color: #667eea; word-break: break-all;">registration link</a>
+                </p>
+                <p style="margin: 0; font-size: 14px; color: #333;">
+                    2. Или используйте код вручную: <strong><span th:text="${invitationToken}" style="color: #667eea; font-family: 'Courier New', monospace; letter-spacing: 2px;">CODE</span></strong>
+                </p>
+            </div>
 
             <p style="font-size: 14px; color: #6c757d;">
                 <strong>Важно:</strong> Приглашение действительно в течение 7 дней.

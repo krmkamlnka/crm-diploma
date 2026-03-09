@@ -1,5 +1,7 @@
+-- Создание enum типа для статуса платежа
 CREATE TYPE payment_status AS ENUM ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED');
 
+-- Таблица платежей студентов
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -25,6 +27,7 @@ CREATE INDEX idx_payments_status ON payments(status);
 CREATE INDEX idx_payments_due_date ON payments(due_date);
 CREATE INDEX idx_payments_transaction_id ON payments(transaction_id);
 
+-- Комментарии
 COMMENT ON TABLE payments IS 'Платежи студентов';
 COMMENT ON COLUMN payments.amount IS 'Сумма платежа';
 COMMENT ON COLUMN payments.currency IS 'Валюта (по умолчанию KZT - казахский тенге)';

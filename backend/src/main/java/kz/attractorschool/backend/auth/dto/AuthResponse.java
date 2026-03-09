@@ -1,12 +1,10 @@
 package kz.attractorschool.backend.auth.dto;
 
-import kz.attractorschool.backend.user.UserRole;
+import kz.attractorschool.backend.user.dto.UserDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 /**
  * DTO для ответа при успешной аутентификации
@@ -34,27 +32,7 @@ public class AuthResponse {
     private String tokenType = "Bearer";
 
     /**
-     * ID пользователя
+     * Информация о пользователе
      */
-    private UUID userId;
-
-    /**
-     * Email пользователя
-     */
-    private String email;
-
-    /**
-     * Полное имя пользователя
-     */
-    private String fullName;
-
-    /**
-     * Роль пользователя
-     */
-    private UserRole role;
-
-    /**
-     * Статус верификации email
-     */
-    private Boolean isEmailVerified;
+    private UserDTO user;
 }
