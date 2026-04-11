@@ -5,6 +5,8 @@ import kz.attractorschool.backend.lesson.Lesson;
 import kz.attractorschool.backend.user.User;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -34,7 +36,8 @@ public class Attendance {
     private User student;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false)
     private AttendanceStatus status;
 
     @Column(columnDefinition = "TEXT")

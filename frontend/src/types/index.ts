@@ -1,11 +1,15 @@
-export type UserRole = 'super_admin' | 'admin' | 'instructor' | 'student';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'INSTRUCTOR' | 'STUDENT';
 
 export interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
+  fullName?: string;
   role: UserRole;
+  phone?: string;
+  profilePhotoUrl?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
   createdAt: string;
   updatedAt: string;
   isEmailVerified: boolean;

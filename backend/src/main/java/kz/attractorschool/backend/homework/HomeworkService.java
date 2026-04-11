@@ -10,10 +10,13 @@ import kz.attractorschool.backend.homework.dto.HomeworkResponse;
 import kz.attractorschool.backend.homework.dto.UpdateHomeworkRequest;
 import kz.attractorschool.backend.lesson.Lesson;
 import kz.attractorschool.backend.lesson.LessonRepository;
+import kz.attractorschool.backend.notification.NotificationService;
 import kz.attractorschool.backend.shared.exception.BadRequestException;
 import kz.attractorschool.backend.shared.exception.ConflictException;
 import kz.attractorschool.backend.shared.exception.ForbiddenException;
 import kz.attractorschool.backend.shared.exception.ResourceNotFoundException;
+import kz.attractorschool.backend.student.Student;
+import kz.attractorschool.backend.student.StudentRepository;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
@@ -37,8 +40,10 @@ public class HomeworkService {
     private final HomeworkRepository homeworkRepository;
     private final LessonRepository lessonRepository;
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
     private final MinioClient minioClient;
     private final kz.attractorschool.backend.submission.HomeworkSubmissionRepository submissionRepository;
+    private final NotificationService notificationService;
 
     @Value("${minio.bucket-name}")
     private String bucketName;
@@ -94,6 +99,17 @@ public class HomeworkService {
 
         homework = homeworkRepository.save(homework);
         log.info("Homework {} created successfully for lesson {}", homework.getId(), lessonId);
+
+        // Уведомляем всех студентов курса о новом ДЗ
+        final Homework savedHomework = homework;
+        studentRepository.findAllByCourseIdWithUser(lesson.getCourse().getId()).forEach(s ->
+                notificationService.notifyNewHomework(
+                        s.getUser(),
+                        lesson.getTitle(),
+                        savedHomework.getTitle(),
+                        lesson.getCourse().getName()
+                )
+        );
 
         return mapToResponseWithCounts(homework);
     }
@@ -180,10 +196,11 @@ public class HomeworkService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        UUID courseId = homework.getLesson().getCourse().getId();
         boolean hasAccess = user.getRole() == UserRole.ADMIN
                 || user.getRole() == UserRole.SUPER_ADMIN
-                || homework.getLesson().getCourse().getInstructor().getId().equals(userId);
-        // TODO: добавить проверку на студентов курса
+                || homework.getLesson().getCourse().getInstructor().getId().equals(userId)
+                || studentRepository.existsByUserIdAndCourseId(userId, courseId);
 
         if (!hasAccess) {
             throw new ForbiddenException("You do not have access to this homework task file");

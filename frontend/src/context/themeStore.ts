@@ -7,39 +7,50 @@ interface ThemeStore {
   setTheme: (theme: 'light' | 'dark') => void
 }
 
+// Read saved theme synchronously before first render to avoid flash
+const getSavedTheme = (): 'light' | 'dark' => {
+  try {
+    const stored = localStorage.getItem('theme-storage')
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return parsed?.state?.theme === 'dark' ? 'dark' : 'light'
+    }
+  } catch {}
+  return 'light'
+}
+
+const applyTheme = (theme: 'light' | 'dark') => {
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+}
+
+// Apply immediately on module load — before React renders
+const initialTheme = getSavedTheme()
+applyTheme(initialTheme)
+
 export const useThemeStore = create<ThemeStore>()(
   persist(
     (set) => ({
-      theme: 'light',
+      theme: initialTheme,
       toggleTheme: () =>
         set((state) => {
           const newTheme = state.theme === 'light' ? 'dark' : 'light'
-          // Update document class for Tailwind dark mode
-          if (newTheme === 'dark') {
-            document.documentElement.classList.add('dark')
-          } else {
-            document.documentElement.classList.remove('dark')
-          }
+          applyTheme(newTheme)
           return { theme: newTheme }
         }),
       setTheme: (theme) =>
         set(() => {
-          // Update document class for Tailwind dark mode
-          if (theme === 'dark') {
-            document.documentElement.classList.add('dark')
-          } else {
-            document.documentElement.classList.remove('dark')
-          }
+          applyTheme(theme)
           return { theme }
         }),
     }),
     {
       name: 'theme-storage',
       onRehydrateStorage: () => (state) => {
-        // Apply theme on initial load
-        if (state?.theme === 'dark') {
-          document.documentElement.classList.add('dark')
-        }
+        if (state) applyTheme(state.theme)
       },
     }
   )

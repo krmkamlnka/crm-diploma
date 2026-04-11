@@ -26,8 +26,11 @@ public interface HomeworkSubmissionRepository extends JpaRepository<HomeworkSubm
             @Param("studentId") UUID studentId);
 
     @Query("SELECT hs FROM HomeworkSubmission hs " +
+           "JOIN FETCH hs.student " +
            "JOIN FETCH hs.homework h " +
-           "JOIN FETCH h.lesson " +
+           "JOIN FETCH h.lesson l " +
+           "JOIN FETCH l.course c " +
+           "JOIN FETCH c.instructor " +
            "WHERE hs.id = :id")
     Optional<HomeworkSubmission> findByIdWithHomeworkAndLesson(@Param("id") UUID id);
 
@@ -43,4 +46,51 @@ public interface HomeworkSubmissionRepository extends JpaRepository<HomeworkSubm
     long countPendingByHomeworkId(@Param("homeworkId") UUID homeworkId);
 
     boolean existsByHomeworkIdAndStudentId(UUID homeworkId, UUID studentId);
+
+    @Query("SELECT hs FROM HomeworkSubmission hs " +
+           "JOIN FETCH hs.student " +
+           "JOIN FETCH hs.homework h " +
+           "JOIN FETCH h.lesson l " +
+           "JOIN FETCH l.course c " +
+           "WHERE c.instructor.id = :instructorId AND hs.grade IS NULL " +
+           "ORDER BY hs.submittedAt DESC")
+    List<HomeworkSubmission> findPendingByInstructorId(@Param("instructorId") UUID instructorId);
+
+    /**
+     * Все сабмиты по курсу (для аналитики инструктора).
+     */
+    @Query("SELECT hs FROM HomeworkSubmission hs " +
+           "JOIN FETCH hs.student " +
+           "JOIN FETCH hs.homework h " +
+           "JOIN FETCH h.lesson l " +
+           "WHERE l.course.id = :courseId")
+    List<HomeworkSubmission> findAllByCourseId(@Param("courseId") UUID courseId);
+
+    /**
+     * Все сабмиты студента (для дедлайнов).
+     */
+    @Query("SELECT hs FROM HomeworkSubmission hs " +
+           "JOIN FETCH hs.homework h " +
+           "JOIN FETCH h.lesson l " +
+           "JOIN FETCH l.course " +
+           "WHERE hs.student.id = :studentId")
+    List<HomeworkSubmission> findAllByStudentId(@Param("studentId") UUID studentId);
+
+    /**
+     * Количество сданных ДЗ студента в курсе.
+     */
+    @Query("SELECT COUNT(hs) FROM HomeworkSubmission hs " +
+           "JOIN hs.homework h JOIN h.lesson l " +
+           "WHERE l.course.id = :courseId AND hs.student.id = :studentUserId")
+    long countSubmittedByStudentAndCourse(@Param("studentUserId") UUID studentUserId,
+                                          @Param("courseId") UUID courseId);
+
+    /**
+     * Средняя оценка студента в курсе.
+     */
+    @Query("SELECT AVG(hs.grade) FROM HomeworkSubmission hs " +
+           "JOIN hs.homework h JOIN h.lesson l " +
+           "WHERE l.course.id = :courseId AND hs.student.id = :studentUserId AND hs.grade IS NOT NULL")
+    Double findAverageGradeByStudentAndCourse(@Param("studentUserId") UUID studentUserId,
+                                              @Param("courseId") UUID courseId);
 }

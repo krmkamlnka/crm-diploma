@@ -66,6 +66,9 @@ public class User {
     @Column(name = "email_verification_token_expires_at")
     private LocalDateTime emailVerificationTokenExpiresAt;
 
+    @Column(name = "telegram_chat_id")
+    private Long telegramChatId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -44,6 +44,22 @@ public class LessonController {
     }
 
     /**
+     * Получить все уроки инструктора (по всем курсам)
+     * GET /api/v1/instructor/lessons
+     */
+    @GetMapping("/lessons")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<Page<LessonResponse>> getAllInstructorLessons(
+            @RequestParam(required = false) UUID courseId,
+            @PageableDefault(size = 100, sort = "scheduledAt", direction = Sort.Direction.ASC) Pageable pageable,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        log.info("GET /api/v1/instructor/lessons - Fetching all lessons for instructor {}", userDetails.getId());
+        Page<LessonResponse> lessons = lessonService.getLessonsByInstructor(userDetails.getId(), courseId, pageable);
+        return ResponseEntity.ok(lessons);
+    }
+
+    /**
      * Получить список уроков курса
      * GET /api/v1/instructor/courses/:courseId/lessons
      */

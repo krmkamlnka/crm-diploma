@@ -46,10 +46,10 @@ public enum UserRole {
     }
 
     /**
-     * Сериализация в JSON (lowercase для совместимости с фронтендом)
+     * Сериализация в JSON
      */
     @JsonValue
     public String toValue() {
-        return this.name().toLowerCase();
+        return this.name();
     }
 }

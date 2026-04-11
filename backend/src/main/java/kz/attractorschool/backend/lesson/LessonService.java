@@ -6,10 +6,12 @@ import kz.attractorschool.backend.lesson.dto.CreateLessonRequest;
 import kz.attractorschool.backend.lesson.dto.LessonConflictResponse;
 import kz.attractorschool.backend.lesson.dto.LessonResponse;
 import kz.attractorschool.backend.lesson.dto.UpdateLessonRequest;
+import kz.attractorschool.backend.notification.NotificationService;
 import kz.attractorschool.backend.shared.exception.BadRequestException;
 import kz.attractorschool.backend.shared.exception.ConflictException;
 import kz.attractorschool.backend.shared.exception.ForbiddenException;
 import kz.attractorschool.backend.shared.exception.ResourceNotFoundException;
+import kz.attractorschool.backend.student.StudentRepository;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
@@ -35,8 +37,8 @@ public class LessonService {
     private final kz.attractorschool.backend.material.MaterialRepository materialRepository;
     private final kz.attractorschool.backend.homework.HomeworkRepository homeworkRepository;
     private final kz.attractorschool.backend.attendance.AttendanceRepository attendanceRepository;
-
-    private static final int CONFLICT_WINDOW_HOURS = 2;
+    private final StudentRepository studentRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public LessonResponse createLesson(UUID courseId, CreateLessonRequest request, UUID instructorId) {
@@ -63,6 +65,12 @@ public class LessonService {
 
         lesson = lessonRepository.save(lesson);
         log.info("Lesson created successfully with ID: {}", lesson.getId());
+
+        // Уведомляем студентов курса о новом уроке
+        final Lesson savedLesson = lesson;
+        studentRepository.findAllByCourseIdWithUser(course.getId()).forEach(s ->
+                notificationService.notifyNewLesson(s.getUser(), savedLesson.getTitle(), course.getName())
+        );
 
         return mapToResponse(lesson);
     }
@@ -94,6 +102,14 @@ public class LessonService {
             return lessonRepository.findByInstructorId(instructorId, pageable)
                     .map(this::mapToResponse);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<LessonResponse> getLessonsByStudentUserId(UUID userId) {
+        log.info("Fetching all lessons for student user {}", userId);
+        return lessonRepository.findAllByStudentUserId(userId).stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -186,11 +202,6 @@ public class LessonService {
         log.info("Lesson {} deleted successfully", lessonId);
     }
 
-    /**
-     * КРИТИЧЕСКИЙ МЕТОД: Проверка конфликтов расписания
-     *
-     * Проверяет, нет ли других уроков в пределах 2 часов до или после планируемого урока
-     */
     private void checkScheduleConflicts(UUID courseId, LocalDateTime scheduledAt, Integer durationMinutes, UUID excludeLessonId) {
         if (scheduledAt == null) {
             throw new BadRequestException("Scheduled time is required");
@@ -200,16 +211,13 @@ public class LessonService {
             throw new BadRequestException("Duration must be a positive number");
         }
 
-        // Вычисляем окно проверки: [scheduledAt - 2 часа, scheduledAt + duration + 2 часа]
-        LocalDateTime windowStart = scheduledAt.minusHours(CONFLICT_WINDOW_HOURS);
-        LocalDateTime endTime = scheduledAt.plusMinutes(durationMinutes);
-        LocalDateTime windowEnd = endTime.plusHours(CONFLICT_WINDOW_HOURS);
+        LocalDateTime newEnd = scheduledAt.plusMinutes(durationMinutes);
 
-        log.debug("Checking conflicts for lesson scheduled at {} (duration: {} min) - window: {} to {}",
-                scheduledAt, durationMinutes, windowStart, windowEnd);
+        log.debug("Checking conflicts for lesson scheduled at {} (duration: {} min, ends at {})",
+                scheduledAt, durationMinutes, newEnd);
 
         List<Lesson> conflicts = lessonRepository.findConflictingLessons(
-                courseId, windowStart, windowEnd, excludeLessonId
+                courseId, scheduledAt, newEnd, excludeLessonId
         );
 
         if (!conflicts.isEmpty()) {
@@ -223,8 +231,8 @@ public class LessonService {
 
             log.warn("Schedule conflict detected with lesson: {}", conflictInfo);
             throw new ConflictException(
-                    String.format("Lesson conflicts with another lesson (within %d hours): %s at %s",
-                            CONFLICT_WINDOW_HOURS, conflictInfo.getTitle(), conflictInfo.getScheduledAt())
+                    String.format("Lesson conflicts with another lesson: %s at %s",
+                            conflictInfo.getTitle(), conflictInfo.getScheduledAt())
             );
         }
     }

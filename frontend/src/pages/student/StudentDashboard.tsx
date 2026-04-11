@@ -1,115 +1,279 @@
-import { BookOpen, Calendar, Award, Clock } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { BookOpen, Calendar, Award, Clock, ArrowRight, Sparkles, TrendingUp, Flame } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import api from '../../services/api'
+import AnimatedStatCard from '../../components/common/AnimatedStatCard'
+import { StatCardSkeleton, ListItemSkeleton } from '../../components/common/Skeleton'
+import { useAuthStore } from '../../context/authStore'
+
+interface Enrollment {
+  id: string
+  courseId: string
+  courseName: string
+  averageGrade: number | null
+  attendanceRate: number | null
+  homeworkCompletionRate: number | null
+}
+
+interface LessonResponse {
+  id: string
+  title: string
+  courseName: string
+  scheduledAt: string
+  hasHomework: boolean
+}
+
+interface RecentGrade {
+  hwTitle: string
+  courseName: string
+  grade: number
+  gradedAt: string
+}
 
 export default function StudentDashboard() {
+  const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const { t, i18n } = useTranslation()
+  const dateLocale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [upcomingLessons, setUpcomingLessons] = useState<LessonResponse[]>([])
+  const [recentGrades, setRecentGrades] = useState<RecentGrade[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [enrollRes, lessonsRes] = await Promise.all([
+        api.get<Enrollment[]>('/student/me/enrollments'),
+        api.get<LessonResponse[]>('/student/lessons'),
+      ])
+      setEnrollments(enrollRes.data)
+      const now = new Date()
+      setUpcomingLessons(lessonsRes.data.filter(l => new Date(l.scheduledAt) >= now).slice(0, 3))
+
+      const grades: RecentGrade[] = []
+      for (const enrollment of enrollRes.data) {
+        try {
+          const perfRes = await api.get<{
+            performance: { lessonTitle: string; homework?: { title: string; submission?: { grade?: number; gradedAt?: string } } }[]
+            courseName: string
+          }>(`/student/me/performance/${enrollment.id}`)
+          for (const p of perfRes.data.performance) {
+            const sub = p.homework?.submission
+            if (sub?.grade != null && sub.gradedAt) {
+              grades.push({ hwTitle: p.homework!.title, courseName: perfRes.data.courseName, grade: sub.grade, gradedAt: sub.gradedAt })
+            }
+          }
+        } catch {}
+      }
+      grades.sort((a, b) => new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime())
+      setRecentGrades(grades.slice(0, 4))
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const avgGrade = enrollments.length > 0
+    ? Math.round(enrollments.reduce((s, e) => s + (e.averageGrade ?? 0), 0) / enrollments.length)
+    : null
+
+  const pendingHomework = upcomingLessons.filter(l => l.hasHomework).length
+
+  const getGradeColor = (grade: number) => {
+    if (grade >= 90) return 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800'
+    if (grade >= 75) return 'text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800'
+    if (grade >= 60) return 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800'
+    return 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/30 border-red-200 dark:border-red-800'
+  }
+
   const stats = [
-    { label: 'Курсы', value: '2', icon: BookOpen, color: 'bg-blue-500' },
-    { label: 'Ближайших занятий', value: '3', icon: Calendar, color: 'bg-green-500' },
-    { label: 'Средний балл', value: '87%', icon: Award, color: 'bg-purple-500' },
-    { label: 'Активных ДЗ', value: '2', icon: Clock, color: 'bg-orange-500' },
+    { label: t('student.dashboard.enrolledCourses'), value: String(enrollments.length), icon: BookOpen, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400' },
+    { label: t('student.dashboard.upcomingLessons'), value: String(upcomingLessons.length), icon: Calendar, bg: 'bg-emerald-50 dark:bg-emerald-900/20', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+    { label: t('student.dashboard.avgGrade'), value: avgGrade != null ? `${avgGrade}%` : '—', icon: Award, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400' },
+    { label: t('common.homework'), value: String(pendingHomework), icon: Clock, bg: 'bg-orange-50 dark:bg-orange-900/20', iconColor: 'text-orange-600 dark:text-orange-400' },
   ]
 
-  const upcomingLessons = [
-    { id: 1, course: 'JavaScript Fundamentals', topic: 'Async/Await', date: '2024-03-15', time: '14:00' },
-    { id: 2, course: 'React Advanced', topic: 'Context API', date: '2024-03-16', time: '16:00' },
-  ]
-
-  const recentGrades = [
-    { id: 1, homework: 'ДЗ #5: Promises', course: 'JavaScript Fundamentals', grade: 92, date: '2024-03-10' },
-    { id: 2, homework: 'ДЗ #3: State Management', course: 'React Advanced', grade: 85, date: '2024-03-12' },
-  ]
+  const hour = new Date().getHours()
+  const greeting = hour < 12
+    ? t('common.goodMorning')
+    : hour < 18
+    ? t('common.goodAfternoon')
+    : t('common.goodEvening')
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Панель студента</h1>
-        <p className="text-gray-600 mt-2">Ваш прогресс и предстоящие занятия</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <div key={stat.label} className="card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                </div>
-                <div className={`w-12 h-12 ${stat.color} rounded-lg flex items-center justify-center`}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Предстоящие занятия</h2>
-          <div className="space-y-3">
-            {upcomingLessons.map((lesson) => (
-              <div key={lesson.id} className="p-4 bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg border border-primary-100">
-                <h3 className="font-medium text-gray-900 mb-1">{lesson.topic}</h3>
-                <p className="text-sm text-gray-600 mb-2">{lesson.course}</p>
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(lesson.date).toLocaleDateString('ru-RU')}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{lesson.time}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="w-full btn-secondary mt-4">
-            Посмотреть календарь
-          </button>
-        </div>
-
-        <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Последние оценки</h2>
-          <div className="space-y-3">
-            {recentGrades.map((grade) => (
-              <div key={grade.id} className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{grade.homework}</h3>
-                    <p className="text-sm text-gray-600">{grade.course}</p>
-                  </div>
-                  <div className={`px-3 py-1 rounded-lg font-semibold ${
-                    grade.grade >= 90 ? 'bg-green-100 text-green-700' :
-                    grade.grade >= 75 ? 'bg-blue-100 text-blue-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {grade.grade}%
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500">
-                  {new Date(grade.date).toLocaleDateString('ru-RU')}
-                </p>
-              </div>
-            ))}
-          </div>
-          <button className="w-full btn-secondary mt-4">
-            Посмотреть дневник
-          </button>
-        </div>
-      </div>
-
-      <div className="card bg-gradient-to-r from-primary-500 to-blue-600 text-white">
-        <div className="flex items-center justify-between">
+      {/* Hero header */}
+      <div className="relative overflow-hidden rounded-3xl
+                      bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500
+                      p-6 text-white shadow-lg
+                      animate-[fadeSlideDown_0.4s_ease_both]">
+        {/* Decorative blobs */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute bottom-0 left-1/3 w-32 h-32 bg-white/10 rounded-full blur-2xl translate-y-1/2" />
+        {/* Dot grid */}
+        <div className="absolute inset-0 opacity-10"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+        />
+        <div className="relative flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-xl font-semibold mb-2">AI Ассистент готов помочь</h3>
-            <p className="text-primary-100">
-              Задавайте вопросы по курсам и получайте персональные рекомендации
-            </p>
+            <p className="text-emerald-100/80 text-sm font-medium mb-1">{greeting}</p>
+            <h1 className="text-2xl font-bold leading-tight">
+              {user ? `${user.firstName} ${user.lastName}` : t('student.dashboard.title')}
+            </h1>
+            <p className="text-emerald-100/70 text-sm mt-1">{t('student.dashboard.subtitle')}</p>
           </div>
-          <button className="bg-white text-primary-600 px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors">
-            Начать диалог
+          {avgGrade != null && (
+            <div className="text-center bg-white/15 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/20 shrink-0">
+              <div className="flex items-center gap-1.5 justify-center mb-0.5">
+                <Flame className="w-4 h-4 text-amber-300" />
+                <span className="text-xs text-emerald-100/70 font-medium">{t('student.dashboard.avgGrade')}</span>
+              </div>
+              <p className="text-3xl font-bold">{avgGrade}%</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+          : stats.map((stat, i) => (
+            <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />
+          ))
+        }
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Upcoming lessons */}
+        <div className="card animate-[fadeSlideUp_0.5s_0.2s_ease_both] opacity-0 [animation-fill-mode:forwards]">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{t('student.dashboard.upcomingLessons')}</h2>
+            <button
+              onClick={() => navigate('/student/calendar')}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 font-medium flex items-center gap-1 transition-colors"
+            >
+              Все <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          {loading ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} />)}</div>
+          ) : upcomingLessons.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">{t('student.dashboard.noLessons')}</div>
+          ) : (
+            <div className="space-y-2">
+              {upcomingLessons.map((lesson, i) => {
+                const dt = new Date(lesson.scheduledAt)
+                return (
+                  <div
+                    key={lesson.id}
+                    className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-all duration-200 group"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <div className="w-10 h-10 bg-primary-50 dark:bg-primary-900/20 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/40 transition-colors">
+                      <Calendar size={18} className="text-primary-600 dark:text-primary-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{lesson.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{lesson.courseName}</p>
+                      <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        <span>{dt.toLocaleDateString(dateLocale)}</span>
+                        <span>{dt.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Recent grades */}
+        <div className="card animate-[fadeSlideUp_0.5s_0.3s_ease_both] opacity-0 [animation-fill-mode:forwards]">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{t('student.dashboard.recentGrades')}</h2>
+            <button
+              onClick={() => navigate('/student/grades')}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 font-medium flex items-center gap-1 transition-colors"
+            >
+              Все <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          {loading ? (
+            <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <ListItemSkeleton key={i} />)}</div>
+          ) : recentGrades.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">{t('student.dashboard.noGrades')}</div>
+          ) : (
+            <div className="space-y-2">
+              {recentGrades.map((g, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-violet-200 dark:hover:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-900/10 transition-all duration-200"
+                >
+                  <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-xl flex items-center justify-center shrink-0">
+                    <TrendingUp size={18} className="text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{g.hwTitle}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{g.courseName}</p>
+                  </div>
+                  <div className={`px-2.5 py-1 rounded-lg text-sm font-bold border ${getGradeColor(g.grade)}`}>
+                    {g.grade}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI Banner */}
+      <div className="relative overflow-hidden rounded-3xl
+                      bg-gradient-to-br from-violet-600 via-primary-600 to-cyan-600
+                      p-6 text-white
+                      shadow-[0_8px_32px_rgba(99,102,241,0.4)]
+                      animate-[fadeSlideUp_0.5s_0.4s_ease_both] opacity-0 [animation-fill-mode:forwards]">
+        {/* Decorative orbs */}
+        <div className="absolute -top-6 -right-6 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+        <div className="absolute -bottom-8 left-1/4 w-48 h-48 bg-cyan-400/15 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-violet-400/20 rounded-full blur-xl -translate-y-1/2" />
+        {/* Dot grid */}
+        <div className="absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
+        />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative w-14 h-14 bg-white/15 backdrop-blur-sm rounded-2xl
+                            flex items-center justify-center
+                            border border-white/20 shadow-inner">
+              <Sparkles className="w-7 h-7 text-white drop-shadow" />
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 to-transparent" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h3 className="font-bold text-lg">{t('student.aiAssistant.title')}</h3>
+                <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                  Beta
+                </span>
+              </div>
+              <p className="text-white/70 text-sm">{t('student.aiAssistant.subtitle')}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/student/ai-assistant')}
+            className="bg-white/95 text-primary-700 px-5 py-2.5 rounded-xl font-bold text-sm
+                       hover:bg-white transition-all duration-200
+                       hover:-translate-y-0.5
+                       shadow-[0_4px_14px_rgba(0,0,0,0.2)]
+                       hover:shadow-[0_6px_20px_rgba(0,0,0,0.25)]
+                       shrink-0 flex items-center gap-2"
+          >
+            {t('common.aiAssistant')} <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>

@@ -1,245 +1,789 @@
-import { useState } from 'react'
-import { X, Video, CheckCircle, XCircle, ExternalLink, Clock } from 'lucide-react'
-
-interface Student {
-  id: string
-  name: string
-  attended: boolean
-  homework?: {
-    url: string
-    isLate: boolean
-    grade?: number
-    status: 'pending' | 'graded'
-  }
-}
-
-interface Lesson {
-  id: string
-  courseId: string
-  courseName: string
-  title: string
-  date: string
-  time: string
-  recordingUrl?: string
-  students: Student[]
-}
+import { useState, useEffect, useRef } from 'react'
+import { X, Video, CheckCircle, XCircle, ExternalLink, Pencil, Paperclip, Trash2, BookOpen, Github, Star, RotateCcw } from 'lucide-react'
+import api from '../../services/api'
 
 interface LessonDetailModalProps {
-  lesson: Lesson
+  lesson: {
+    id: string
+    courseId: string
+    courseName: string
+    title: string
+    scheduledAt: string
+    durationMinutes?: number
+    location?: string
+    onlineMeetingUrl?: string
+    recordingUrl?: string
+    status: string
+    hasHomework: boolean
+    attendanceCount?: number
+    totalStudents?: number
+  }
   onClose: () => void
   onSave: () => void
 }
 
+interface StudentResponse {
+  id: string
+  userId: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
+interface AttendanceResponse {
+  id: string
+  lessonId: string
+  studentId: string
+  status: 'PRESENT' | 'ABSENT' | 'LATE'
+  notes?: string
+  markedAt?: string
+}
+
+interface MaterialResponse {
+  id: string
+  lessonId: string
+  name: string
+  fileUrl: string
+  fileType: string
+  fileSize: number
+  uploadedAt: string
+}
+
+interface StudentInfo {
+  id: string
+  userId: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
+interface SubmissionWithStudent {
+  id: string
+  homeworkId: string
+  student: StudentInfo
+  githubUrl: string
+  submittedAt: string
+  isLate: boolean
+  grade: number | null
+  feedback: string | null
+  gradedAt: string | null
+  gradedBy: string | null
+}
+
+interface HomeworkInfo {
+  id: string
+  title: string
+  deadline: string
+}
+
+interface SubmissionListResponse {
+  homework: HomeworkInfo
+  submissions: SubmissionWithStudent[]
+}
+
 export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDetailModalProps) {
-  const [recordingUrl, setRecordingUrl] = useState(lesson.recordingUrl || '')
-  const [attendance, setAttendance] = useState<Record<string, boolean>>(
-    lesson.students.reduce((acc, student) => ({ ...acc, [student.id]: student.attended }), {})
-  )
-  const [grades, setGrades] = useState<Record<string, string>>({})
-  const [feedback, setFeedback] = useState<Record<string, string>>({})
+  const [recordingUrl, setRecordingUrl] = useState(lesson.recordingUrl ?? '')
+  const [students, setStudents] = useState<StudentResponse[]>([])
+  const [attendance, setAttendance] = useState<Record<string, 'PRESENT' | 'ABSENT'>>({})
+  const [loadingData, setLoadingData] = useState(true)
+  const [savingRecording, setSavingRecording] = useState(false)
+  const [savingAttendance, setSavingAttendance] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSave = () => {
-    // TODO: Save recording URL, attendance, and grades
-    console.log('Saving:', { recordingUrl, attendance, grades, feedback })
-    onSave()
+  // Edit mode
+  const [editMode, setEditMode] = useState(false)
+  const [editTitle, setEditTitle] = useState(lesson.title)
+  const [editDescription, setEditDescription] = useState('')
+  const [editDate, setEditDate] = useState(lesson.scheduledAt.slice(0, 10))
+  const [editTime, setEditTime] = useState(lesson.scheduledAt.slice(11, 16))
+  const [editDuration, setEditDuration] = useState(String(lesson.durationMinutes ?? 120))
+  const [editLocation, setEditLocation] = useState(lesson.location ?? '')
+  const [editOnlineUrl, setEditOnlineUrl] = useState(lesson.onlineMeetingUrl ?? '')
+  const [materials, setMaterials] = useState<MaterialResponse[]>([])
+  const [newFiles, setNewFiles] = useState<File[]>([])
+  const [deletingMaterialIds, setDeletingMaterialIds] = useState<Set<string>>(new Set())
+  const [isSaving, setIsSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Homework & grading
+  const [homework, setHomework] = useState<HomeworkInfo | null>(null)
+  const [submissions, setSubmissions] = useState<SubmissionWithStudent[]>([])
+  // grade inputs keyed by submissionId
+  const [gradeInputs, setGradeInputs] = useState<Record<string, string>>({})
+  const [feedbackInputs, setFeedbackInputs] = useState<Record<string, string>>({})
+  const [gradingId, setGradingId] = useState<string | null>(null)
+  // which submission rows are in edit-grade mode
+  const [editingGradeIds, setEditingGradeIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoadingData(true)
+      try {
+        const requests: Promise<any>[] = [
+          api.get<AttendanceResponse[]>(`/instructor/lessons/${lesson.id}/attendance`),
+          api.get(`/instructor/students?courseId=${lesson.courseId}&size=100`),
+          api.get(`/instructor/lessons/${lesson.id}`),
+          api.get<MaterialResponse[]>(`/instructor/lessons/${lesson.id}/materials`),
+        ]
+
+        if (lesson.hasHomework) {
+          requests.push(
+            api.get<HomeworkInfo>(`/instructor/lessons/${lesson.id}/homework`)
+              .catch(() => null)
+          )
+        }
+
+        const results = await Promise.all(requests)
+        const [attendanceRes, studentsRes, lessonRes, materialsRes, homeworkRes] = results
+
+        setEditDescription(lessonRes.data.description ?? '')
+        setMaterials(materialsRes.data)
+
+        const existingAttendance: Record<string, 'PRESENT' | 'ABSENT'> = {}
+        for (const record of attendanceRes.data) {
+          existingAttendance[record.studentId] = record.status === 'LATE' ? 'PRESENT' : record.status
+        }
+
+        const studentList: StudentResponse[] = studentsRes.data.content ?? studentsRes.data
+        setStudents(studentList)
+
+        const initialAttendance: Record<string, 'PRESENT' | 'ABSENT'> = {}
+        for (const s of studentList) {
+          initialAttendance[s.userId] = existingAttendance[s.userId] ?? 'ABSENT'
+        }
+        setAttendance(initialAttendance)
+
+        if (homeworkRes?.data) {
+          const hw: HomeworkInfo = homeworkRes.data
+          setHomework(hw)
+          // load submissions
+          try {
+            const subRes = await api.get<SubmissionListResponse>(`/instructor/homework/${hw.id}/submissions`)
+            setSubmissions(subRes.data.submissions ?? [])
+            const grades: Record<string, string> = {}
+            const feedbacks: Record<string, string> = {}
+            for (const s of subRes.data.submissions ?? []) {
+              grades[s.id] = s.grade != null ? String(s.grade) : ''
+              feedbacks[s.id] = s.feedback ?? ''
+            }
+            setGradeInputs(grades)
+            setFeedbackInputs(feedbacks)
+          } catch {
+            // no submissions yet
+          }
+        }
+      } catch {
+        setError('Не удалось загрузить данные')
+      } finally {
+        setLoadingData(false)
+      }
+    }
+    fetchData()
+  }, [lesson.id, lesson.courseId, lesson.hasHomework])
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} Б`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`
   }
 
-  const toggleAttendance = (studentId: string) => {
-    setAttendance({ ...attendance, [studentId]: !attendance[studentId] })
+  const handleDeleteMaterial = async (materialId: string) => {
+    setDeletingMaterialIds((prev) => new Set(prev).add(materialId))
+    try {
+      await api.delete(`/instructor/materials/${materialId}`)
+      setMaterials((prev) => prev.filter((m) => m.id !== materialId))
+    } catch {
+      setError('Не удалось удалить файл')
+    } finally {
+      setDeletingMaterialIds((prev) => {
+        const next = new Set(prev)
+        next.delete(materialId)
+        return next
+      })
+    }
   }
 
-  const handleGradeChange = (studentId: string, grade: string) => {
-    setGrades({ ...grades, [studentId]: grade })
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
+    setError(null)
+    try {
+      await api.patch(`/instructor/lessons/${lesson.id}`, {
+        title: editTitle,
+        description: editDescription || undefined,
+        scheduledAt: `${editDate}T${editTime}:00`,
+        durationMinutes: parseInt(editDuration, 10),
+        location: editLocation || undefined,
+        onlineMeetingUrl: editOnlineUrl || undefined,
+      })
+
+      if (newFiles.length > 0) {
+        const formData = new FormData()
+        newFiles.forEach((f) => formData.append('files', f))
+        const res = await api.post<{ materials: MaterialResponse[] }>(
+          `/instructor/lessons/${lesson.id}/materials`,
+          formData,
+          { headers: { 'Content-Type': 'multipart/form-data' } }
+        )
+        setMaterials((prev) => [...prev, ...res.data.materials])
+        setNewFiles([])
+      }
+
+      setEditMode(false)
+      onSave()
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при сохранении')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleFeedbackChange = (studentId: string, text: string) => {
-    setFeedback({ ...feedback, [studentId]: text })
+  const handleSaveRecording = async () => {
+    setSavingRecording(true)
+    setError(null)
+    try {
+      await api.patch(`/instructor/lessons/${lesson.id}`, { recordingUrl })
+      onSave()
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при сохранении записи')
+    } finally {
+      setSavingRecording(false)
+    }
   }
 
-  const submitGrade = (studentId: string) => {
-    // TODO: Submit grade and feedback for student
-    console.log(`Submitting grade ${grades[studentId]} and feedback for student ${studentId}:`, feedback[studentId])
-    alert('Оценка и обратная связь отправлены!')
+  const handleSaveAttendance = async () => {
+    setSavingAttendance(true)
+    setError(null)
+    try {
+      const payload = {
+        attendance: students.map((s) => ({
+          studentId: s.userId,
+          status: attendance[s.userId] ?? 'ABSENT',
+        })),
+      }
+      await api.post(`/instructor/lessons/${lesson.id}/attendance`, payload)
+      onSave()
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при сохранении посещаемости')
+    } finally {
+      setSavingAttendance(false)
+    }
   }
+
+  const toggleAttendance = (userId: string) => {
+    setAttendance((prev) => ({
+      ...prev,
+      [userId]: prev[userId] === 'PRESENT' ? 'ABSENT' : 'PRESENT',
+    }))
+  }
+
+  const handleGrade = async (submissionId: string) => {
+    const gradeVal = gradeInputs[submissionId]
+    const grade = parseInt(gradeVal, 10)
+    if (isNaN(grade) || grade < 0 || grade > 100) {
+      setError('Оценка должна быть от 0 до 100')
+      return
+    }
+    setGradingId(submissionId)
+    setError(null)
+    try {
+      const res = await api.patch(`/instructor/submissions/${submissionId}/grade`, {
+        grade,
+        feedback: feedbackInputs[submissionId] || undefined,
+      })
+      setSubmissions((prev) =>
+        prev.map((s) => (s.id === submissionId ? { ...s, grade: res.data.grade, feedback: res.data.feedback, gradedAt: res.data.gradedAt } : s))
+      )
+      setEditingGradeIds((prev) => {
+        const next = new Set(prev)
+        next.delete(submissionId)
+        return next
+      })
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при выставлении оценки')
+    } finally {
+      setGradingId(null)
+    }
+  }
+
+  const startEditGrade = (sub: SubmissionWithStudent) => {
+    setGradeInputs((prev) => ({ ...prev, [sub.id]: sub.grade != null ? String(sub.grade) : '' }))
+    setFeedbackInputs((prev) => ({ ...prev, [sub.id]: sub.feedback ?? '' }))
+    setEditingGradeIds((prev) => new Set(prev).add(sub.id))
+  }
+
+  const cancelEditGrade = (submissionId: string) => {
+    setEditingGradeIds((prev) => {
+      const next = new Set(prev)
+      next.delete(submissionId)
+      return next
+    })
+  }
+
+  // map userId -> submission for quick lookup
+  const submissionByUserId: Record<string, SubmissionWithStudent> = {}
+  for (const sub of submissions) {
+    submissionByUserId[sub.student.userId] = sub
+  }
+
+  const scheduledDate = new Date(lesson.scheduledAt)
+  const displayDate = scheduledDate.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const displayTime = scheduledDate.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const presentCount = Object.values(attendance).filter((s) => s === 'PRESENT').length
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{lesson.title}</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {editMode ? 'Редактировать занятие' : lesson.title}
+            </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {lesson.courseName} • {new Date(lesson.date).toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-              })} • {lesson.time}
+              {lesson.courseName} • {displayDate} • {displayTime}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!editMode && (
+              <button
+                onClick={() => setEditMode(true)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+                Редактировать
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Recording URL */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Ссылка на видеозапись
-            </label>
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Video className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {editMode && (
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Название <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="url"
-                  value={recordingUrl}
-                  onChange={(e) => setRecordingUrl(e.target.value)}
-                  className="input-field pl-10"
-                  placeholder="https://example.com/recording"
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="input-field"
                 />
               </div>
-              {recordingUrl && (
-                <a
-                  href={recordingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-secondary flex items-center gap-2"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Открыть
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Attendance */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Посещаемость ({Object.values(attendance).filter(Boolean).length}/{lesson.students.length})
-            </h3>
-            <div className="space-y-2">
-              {lesson.students.map((student) => (
-                <div
-                  key={student.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                >
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{student.name}</span>
-                  <button
-                    onClick={() => toggleAttendance(student.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      attendance[student.id]
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
-                    }`}
-                  >
-                    {attendance[student.id] ? (
-                      <>
-                        <CheckCircle className="w-4 h-4" />
-                        Присутствовал
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-4 h-4" />
-                        Отсутствовал
-                      </>
-                    )}
-                  </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Дата <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="input-field"
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Время <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Длительность (минут)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editDuration}
+                  onChange={(e) => setEditDuration(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Описание
+                </label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="input-field resize-none"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Место проведения
+                </label>
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  className="input-field"
+                  placeholder="Аудитория 101"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Ссылка на онлайн-встречу
+                </label>
+                <input
+                  type="url"
+                  value={editOnlineUrl}
+                  onChange={(e) => setEditOnlineUrl(e.target.value)}
+                  className="input-field"
+                  placeholder="https://zoom.us/j/..."
+                />
+              </div>
 
-          {/* Homework submissions */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Домашние задания</h3>
-            <div className="space-y-4">
-              {lesson.students.map((student) => (
-                <div
-                  key={student.id}
-                  className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-750"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100">{student.name}</h4>
-                      {student.homework && (
-                        <a
-                          href={student.homework.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1 mt-1 break-all"
-                        >
-                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                          {student.homework.url}
-                        </a>
-                      )}
-                    </div>
-                    {student.homework?.isLate && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded text-xs font-medium flex-shrink-0">
-                        <Clock className="w-3 h-3" />
-                        Просрочено
-                      </span>
-                    )}
-                  </div>
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="w-5 h-5 text-gray-500" />
+                  <span className="font-medium text-gray-900 dark:text-gray-100">Файлы</span>
+                </div>
 
-                  {student.homework ? (
-                    student.homework.status === 'graded' ? (
-                      <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-semibold">
-                        Оценка: {student.homework.grade}%
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={grades[student.id] || ''}
-                            onChange={(e) => handleGradeChange(student.id, e.target.value)}
-                            className="w-32 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                            placeholder="0-100"
-                          />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">баллов</span>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Обратная связь
-                          </label>
-                          <textarea
-                            value={feedback[student.id] || ''}
-                            onChange={(e) => handleFeedbackChange(student.id, e.target.value)}
-                            rows={3}
-                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-none"
-                            placeholder="Напишите комментарий к работе студента..."
-                          />
-                        </div>
+                {materials.length > 0 && (
+                  <div className="space-y-2">
+                    {materials.map((m) => (
+                      <div key={m.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">
+                        <span className="text-gray-800 dark:text-gray-200 truncate flex-1">{m.name}</span>
+                        <span className="text-gray-500 mx-3 shrink-0">{formatFileSize(m.fileSize)}</span>
                         <button
-                          onClick={() => submitGrade(student.id)}
-                          disabled={!grades[student.id]}
-                          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                          type="button"
+                          onClick={() => handleDeleteMaterial(m.id)}
+                          disabled={deletingMaterialIds.has(m.id)}
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded disabled:opacity-50"
                         >
-                          Оценить и отправить
+                          <Trash2 className="w-4 h-4 text-red-500" />
                         </button>
                       </div>
-                    )
-                  ) : (
-                    <div className="text-sm text-gray-500 dark:text-gray-400 italic">
-                      Домашняя работа не сдана
-                    </div>
+                    ))}
+                  </div>
+                )}
+
+                {newFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {newFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+                        <span className="text-gray-800 dark:text-gray-200 truncate flex-1">{f.name}</span>
+                        <span className="text-gray-500 mx-3 shrink-0">{formatFileSize(f.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? [])
+                    setNewFiles((prev) => [...prev, ...files])
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-secondary text-sm flex items-center gap-2"
+                >
+                  <Paperclip className="w-4 h-4" />
+                  Прикрепить файлы
+                </button>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={isSaving} className="btn-primary flex-1 disabled:opacity-50">
+                  {isSaving ? 'Сохранение...' : 'Сохранить'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditMode(false); setError(null); setNewFiles([]) }}
+                  className="btn-secondary flex-1"
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          )}
+
+          {!editMode && (
+            <>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {lesson.location && (
+                  <div>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Место: </span>
+                    <span className="text-gray-900 dark:text-gray-100">{lesson.location}</span>
+                  </div>
+                )}
+                {lesson.onlineMeetingUrl && (
+                  <div>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Онлайн: </span>
+                    <a
+                      href={lesson.onlineMeetingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-600 hover:text-primary-700 flex items-center gap-1 inline-flex"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Ссылка
+                    </a>
+                  </div>
+                )}
+                {lesson.durationMinutes && (
+                  <div>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Длительность: </span>
+                    <span className="text-gray-900 dark:text-gray-100">{lesson.durationMinutes} мин</span>
+                  </div>
+                )}
+                <div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Статус: </span>
+                  <span className="text-gray-900 dark:text-gray-100">{lesson.status}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Ссылка на видеозапись
+                </label>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Video className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="url"
+                      value={recordingUrl}
+                      onChange={(e) => setRecordingUrl(e.target.value)}
+                      className="input-field pl-10"
+                      placeholder="https://example.com/recording"
+                    />
+                  </div>
+                  {recordingUrl && (
+                    <a
+                      href={recordingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary flex items-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Открыть
+                    </a>
                   )}
                 </div>
-              ))}
-            </div>
-          </div>
+                <button
+                  onClick={handleSaveRecording}
+                  disabled={savingRecording}
+                  className="mt-2 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingRecording ? 'Сохранение...' : 'Сохранить запись'}
+                </button>
+              </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button onClick={handleSave} className="btn-primary flex-1">
-              Сохранить изменения
-            </button>
-            <button onClick={onClose} className="btn-secondary flex-1">
-              Отмена
-            </button>
-          </div>
+              {/* Посещаемость + ДЗ + оценки */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Посещаемость ({presentCount}/{students.length})
+                </h3>
+
+                {loadingData ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3 mb-4">
+                      {students.map((student) => {
+                        const sub = submissionByUserId[student.userId]
+                        const isEditing = sub ? editingGradeIds.has(sub.id) : false
+                        const hasGrade = sub?.grade != null
+
+                        return (
+                          <div
+                            key={student.userId}
+                            className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+                          >
+                            {/* Строка студента */}
+                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700">
+                              <span className="font-medium text-gray-900 dark:text-gray-100">
+                                {student.firstName} {student.lastName}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {/* Статус ДЗ */}
+                                {homework && (
+                                  <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
+                                    sub
+                                      ? sub.isLate
+                                        ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                                        : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                      : 'bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400'
+                                  }`}>
+                                    <BookOpen className="w-3 h-3" />
+                                    {sub ? (sub.isLate ? 'Сдано с опозданием' : 'Сдано') : 'Не сдано'}
+                                  </span>
+                                )}
+                                {/* Посещаемость */}
+                                <button
+                                  onClick={() => toggleAttendance(student.userId)}
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                                    attendance[student.userId] === 'PRESENT'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                                      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
+                                  }`}
+                                >
+                                  {attendance[student.userId] === 'PRESENT' ? (
+                                    <><CheckCircle className="w-4 h-4" />Присутствовал</>
+                                  ) : (
+                                    <><XCircle className="w-4 h-4" />Отсутствовал</>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Блок ДЗ — только если есть сабмит */}
+                            {sub && (
+                              <div className="px-3 pb-3 pt-2 bg-white dark:bg-gray-800 space-y-2">
+                                {/* Ссылка на GitHub */}
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Github className="w-4 h-4 text-gray-500 shrink-0" />
+                                  <a
+                                    href={sub.githubUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary-600 dark:text-primary-400 hover:underline truncate"
+                                  >
+                                    {sub.githubUrl}
+                                  </a>
+                                  <span className="text-gray-400 text-xs shrink-0">
+                                    {new Date(sub.submittedAt).toLocaleDateString('ru-RU')}
+                                  </span>
+                                </div>
+
+                                {/* Оценка — просмотр */}
+                                {hasGrade && !isEditing && (
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Star className="w-4 h-4 text-yellow-500" />
+                                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                        {sub.grade}/100
+                                      </span>
+                                      {sub.feedback && (
+                                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                                          — {sub.feedback}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => startEditGrade(sub)}
+                                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                    >
+                                      <RotateCcw className="w-3 h-3" />
+                                      Изменить
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Форма выставления/редактирования оценки */}
+                                {(!hasGrade || isEditing) && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative w-28 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        placeholder="0–100"
+                                        value={gradeInputs[sub.id] ?? ''}
+                                        onChange={(e) =>
+                                          setGradeInputs((prev) => ({ ...prev, [sub.id]: e.target.value }))
+                                        }
+                                        className="input-field pr-8 text-sm"
+                                      />
+                                      <Star className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-yellow-400 pointer-events-none" />
+                                    </div>
+                                    <input
+                                      type="text"
+                                      placeholder="Комментарий (необязательно)"
+                                      value={feedbackInputs[sub.id] ?? ''}
+                                      onChange={(e) =>
+                                        setFeedbackInputs((prev) => ({ ...prev, [sub.id]: e.target.value }))
+                                      }
+                                      className="input-field text-sm flex-1"
+                                    />
+                                    <button
+                                      onClick={() => handleGrade(sub.id)}
+                                      disabled={gradingId === sub.id}
+                                      className="btn-primary text-sm px-3 py-2 shrink-0 disabled:opacity-50"
+                                    >
+                                      {gradingId === sub.id ? '...' : hasGrade ? 'Сохранить' : 'Оценить'}
+                                    </button>
+                                    {isEditing && (
+                                      <button
+                                        onClick={() => cancelEditGrade(sub.id)}
+                                        className="btn-secondary text-sm px-3 py-2 shrink-0"
+                                      >
+                                        Отмена
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={handleSaveAttendance}
+                      disabled={savingAttendance || students.length === 0}
+                      className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {savingAttendance ? 'Сохранение...' : 'Сохранить посещаемость'}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button onClick={onClose} className="btn-secondary flex-1">
+                  Закрыть
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,278 +1,184 @@
-import { CheckCircle, XCircle, Clock, CreditCard } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { CheckCircle, XCircle, Clock, CreditCard, TrendingDown } from 'lucide-react'
+import api from '../../services/api'
+import AnimatedStatCard from '../../components/common/AnimatedStatCard'
+import { StatCardSkeleton, Skeleton } from '../../components/common/Skeleton'
+import EmptyState from '../../components/common/EmptyState'
 
 interface Payment {
   id: string
   courseId: string
   courseName: string
-  month: string
-  year: number
   amount: number
-  status: 'paid' | 'unpaid' | 'overdue'
+  currency: string
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
   dueDate: string
-  paidDate?: string
+  paidAt?: string
+  periodMonth?: number
+  periodYear?: number
+}
+
+const MONTH_NAMES = [
+  '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
+
+const formatAmount = (amount: number) =>
+  new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'KZT', minimumFractionDigits: 0 }).format(amount)
+
+function PaymentRowSkeleton() {
+  return (
+    <tr className="border-b border-gray-100 dark:border-gray-800">
+      <td className="py-3.5 px-4"><Skeleton className="h-4 w-36 rounded" /></td>
+      <td className="py-3.5 px-4"><Skeleton className="h-4 w-20 rounded" /></td>
+      <td className="py-3.5 px-4"><Skeleton className="h-4 w-24 rounded" /></td>
+      <td className="py-3.5 px-4"><Skeleton className="h-4 w-24 rounded" /></td>
+      <td className="py-3.5 px-4"><Skeleton className="h-6 w-24 rounded-full" /></td>
+    </tr>
+  )
 }
 
 export default function PaymentsPage() {
-  const payments: Payment[] = [
-    {
-      id: '1',
-      courseId: '1',
-      courseName: 'JavaScript Fundamentals',
-      month: 'Январь',
-      year: 2025,
-      amount: 50000,
-      status: 'paid',
-      dueDate: '2025-01-10',
-      paidDate: '2025-01-08',
-    },
-    {
-      id: '2',
-      courseId: '2',
-      courseName: 'React Advanced',
-      month: 'Январь',
-      year: 2025,
-      amount: 60000,
-      status: 'paid',
-      dueDate: '2025-01-10',
-      paidDate: '2025-01-09',
-    },
-    {
-      id: '3',
-      courseId: '1',
-      courseName: 'JavaScript Fundamentals',
-      month: 'Февраль',
-      year: 2025,
-      amount: 50000,
-      status: 'unpaid',
-      dueDate: '2025-02-10',
-    },
-    {
-      id: '4',
-      courseId: '2',
-      courseName: 'React Advanced',
-      month: 'Февраль',
-      year: 2025,
-      amount: 60000,
-      status: 'unpaid',
-      dueDate: '2025-02-10',
-    },
-    {
-      id: '5',
-      courseId: '1',
-      courseName: 'JavaScript Fundamentals',
-      month: 'Декабрь',
-      year: 2024,
-      amount: 50000,
-      status: 'overdue',
-      dueDate: '2024-12-10',
-    },
-  ]
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const getStatusBadge = (status: Payment['status']) => {
-    switch (status) {
-      case 'paid':
-        return (
-          <span className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-sm font-medium">
-            <CheckCircle className="w-4 h-4" />
-            Оплачен
-          </span>
-        )
-      case 'unpaid':
-        return (
-          <span className="flex items-center gap-2 px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-sm font-medium">
-            <Clock className="w-4 h-4" />
-            Не оплачен
-          </span>
-        )
-      case 'overdue':
-        return (
-          <span className="flex items-center gap-2 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-sm font-medium">
-            <XCircle className="w-4 h-4" />
-            Просрочен
-          </span>
-        )
-    }
-  }
+  useEffect(() => {
+    api.get<Payment[]>('/student/payments')
+      .then((res) => setPayments(res.data))
+      .catch((err) => console.error('Failed to load payments:', err))
+      .finally(() => setLoading(false))
+  }, [])
 
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'KZT',
-      minimumFractionDigits: 0,
-    }).format(amount)
-  }
+  const totalPaid = payments.filter((p) => p.status === 'COMPLETED').reduce((s, p) => s + p.amount, 0)
+  const totalUnpaid = payments.filter((p) => p.status !== 'COMPLETED').reduce((s, p) => s + p.amount, 0)
+  const isOverdue = (p: Payment) => p.status !== 'COMPLETED' && new Date(p.dueDate) < new Date()
 
-  const totalPaid = payments
-    .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + p.amount, 0)
-
-  const totalUnpaid = payments
-    .filter(p => p.status === 'unpaid' || p.status === 'overdue')
-    .reduce((sum, p) => sum + p.amount, 0)
-
-  const handlePayment = (paymentId: string) => {
-    // TODO: Integrate with Kaspi Pay sandbox
-    alert(`Переход к оплате через Kaspi Pay для платежа ${paymentId}`)
-  }
-
-  // Group payments by year
-  const paymentsByYear = payments.reduce((acc, payment) => {
-    if (!acc[payment.year]) {
-      acc[payment.year] = []
-    }
-    acc[payment.year].push(payment)
+  const paymentsByYear = payments.reduce((acc, p) => {
+    const year = p.periodYear ?? new Date(p.dueDate).getFullYear()
+    if (!acc[year]) acc[year] = []
+    acc[year].push(p)
     return acc
   }, {} as Record<number, Payment[]>)
 
+  const getMonthLabel = (p: Payment) =>
+    p.periodMonth ? MONTH_NAMES[p.periodMonth] : new Date(p.dueDate).toLocaleDateString('ru-RU', { month: 'long' })
+
+  const getStatusBadge = (status: Payment['status'], overdue: boolean) => {
+    if (status === 'COMPLETED') return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-medium">
+        <CheckCircle className="w-3.5 h-3.5" /> Оплачен
+      </span>
+    )
+    if (overdue) return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-full text-xs font-medium">
+        <XCircle className="w-3.5 h-3.5" /> Просрочен
+      </span>
+    )
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-full text-xs font-medium">
+        <Clock className="w-3.5 h-3.5" /> Ожидает
+      </span>
+    )
+  }
+
+  const stats = [
+    { label: 'Оплачено', value: formatAmount(totalPaid), icon: CheckCircle, bg: 'bg-emerald-50 dark:bg-emerald-900/20', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+    { label: 'К оплате', value: formatAmount(totalUnpaid), icon: TrendingDown, bg: 'bg-amber-50 dark:bg-amber-900/20', iconColor: 'text-amber-600 dark:text-amber-400' },
+    { label: 'Всего платежей', value: String(payments.length), icon: CreditCard, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400' },
+  ]
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Оплата обучения</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">История платежей и управление оплатой</p>
+      <div className="animate-fadeSlideDown">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Оплата обучения</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">История платежей</p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-green-500 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Оплачено</h3>
-          </div>
-          <p className="text-3xl font-bold text-green-700 dark:text-green-400">
-            {formatAmount(totalPaid)}
-          </p>
-        </div>
-
-        <div className="card bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-yellow-500 rounded-lg">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">К оплате</h3>
-          </div>
-          <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">
-            {formatAmount(totalUnpaid)}
-          </p>
-        </div>
-
-        <div className="card bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-500 rounded-lg">
-              <CreditCard className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Всего платежей</h3>
-          </div>
-          <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">
-            {payments.length}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {loading
+          ? Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)
+          : stats.map((s, i) => <AnimatedStatCard key={s.label} {...s} delay={i * 80} />)
+        }
       </div>
 
-      {/* Payments by year */}
-      {Object.keys(paymentsByYear)
-        .sort((a, b) => Number(b) - Number(a))
-        .map((year) => (
-          <div key={year} className="card">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">{year} год</h2>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Курс
+      {loading ? (
+        <div className="card animate-[fadeSlideUp_0.4s_0.2s_ease_both] opacity-0 [animation-fill-mode:forwards]">
+          <Skeleton className="h-6 w-20 mb-4 rounded" />
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  {['Курс', 'Месяц', 'Сумма', 'Срок', 'Статус'].map((h) => (
+                    <th key={h} className="text-left py-3 px-4">
+                      <Skeleton className="h-3 w-16 rounded" />
                     </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Месяц
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Сумма
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Срок оплаты
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Статус
-                    </th>
-                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Действия
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentsByYear[Number(year)].map((payment) => (
-                    <tr
-                      key={payment.id}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
-                      <td className="py-4 px-4">
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {payment.courseName}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-gray-700 dark:text-gray-300">{payment.month}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
-                          {formatAmount(payment.amount)}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(payment.dueDate).toLocaleDateString('ru-RU', {
-                            day: 'numeric',
-                            month: 'long',
-                          })}
-                        </span>
-                        {payment.paidDate && (
-                          <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                            Оплачено: {new Date(payment.paidDate).toLocaleDateString('ru-RU')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">{getStatusBadge(payment.status)}</td>
-                      <td className="py-4 px-4 text-right">
-                        {payment.status !== 'paid' && (
-                          <button
-                            onClick={() => handlePayment(payment.id)}
-                            className={`btn-primary text-sm ${
-                              payment.status === 'overdue'
-                                ? 'bg-red-600 hover:bg-red-700'
-                                : ''
-                            }`}
-                          >
-                            Оплатить
-                          </button>
-                        )}
-                      </td>
-                    </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-
-      {/* Kaspi Pay info */}
-      <div className="card bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-purple-500 rounded-lg">
-            <CreditCard className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              Оплата через Kaspi Pay
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Вы можете оплатить обучение удобным способом через Kaspi Pay. Платеж будет обработан мгновенно,
-              и статус обновится автоматически.
-            </p>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, i) => <PaymentRowSkeleton key={i} />)}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
+      ) : payments.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={CreditCard}
+            title="Платежей пока нет"
+            description="История платежей появится после зачисления на курс"
+          />
+        </div>
+      ) : (
+        Object.keys(paymentsByYear)
+          .sort((a, b) => Number(b) - Number(a))
+          .map((year) => (
+            <div key={year} className="card animate-[fadeSlideUp_0.4s_0.2s_ease_both] opacity-0 [animation-fill-mode:forwards]">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wide">{year}</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800">
+                      {['Курс', 'Месяц', 'Сумма', 'Срок оплаты', 'Статус'].map((h) => (
+                        <th key={h} className="py-2.5 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentsByYear[Number(year)].map((payment) => {
+                      const overdue = isOverdue(payment)
+                      return (
+                        <tr
+                          key={payment.id}
+                          className={`border-b border-gray-50 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                            overdue ? 'bg-red-50/40 dark:bg-red-950/20' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{payment.courseName}</td>
+                          <td className="py-3.5 px-4 text-sm text-gray-600 dark:text-gray-400">{getMonthLabel(payment)}</td>
+                          <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{formatAmount(payment.amount)}</td>
+                          <td className="py-3.5 px-4">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {new Date(payment.dueDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                            </span>
+                            {payment.paidAt && (
+                              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                ✓ {new Date(payment.paidAt).toLocaleDateString('ru-RU')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">{getStatusBadge(payment.status, overdue)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))
+      )}
     </div>
   )
 }

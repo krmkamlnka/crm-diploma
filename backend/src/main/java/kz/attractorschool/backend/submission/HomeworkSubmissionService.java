@@ -2,6 +2,7 @@ package kz.attractorschool.backend.submission;
 
 import kz.attractorschool.backend.homework.Homework;
 import kz.attractorschool.backend.homework.HomeworkRepository;
+import kz.attractorschool.backend.notification.NotificationService;
 import kz.attractorschool.backend.shared.exception.BadRequestException;
 import kz.attractorschool.backend.shared.exception.ConflictException;
 import kz.attractorschool.backend.shared.exception.ForbiddenException;
@@ -28,6 +29,7 @@ public class HomeworkSubmissionService {
     private final HomeworkSubmissionRepository submissionRepository;
     private final HomeworkRepository homeworkRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public SubmissionResponse submitHomework(UUID homeworkId, SubmitHomeworkRequest request, UUID studentId) {
@@ -65,6 +67,25 @@ public class HomeworkSubmissionService {
         submission = submissionRepository.save(submission);
         log.info("Homework submission {} created successfully", submission.getId());
 
+        User instructor = homework.getLesson().getCourse().getInstructor();
+        notificationService.notifyHomeworkSubmitted(
+                instructor,
+                student.getFirstName(),
+                student.getLastName(),
+                homework.getTitle(),
+                homework.getLesson().getCourse().getName()
+        );
+
+        return mapToResponse(submission);
+    }
+
+    @Transactional(readOnly = true)
+    public SubmissionResponse getMySubmission(UUID homeworkId, UUID studentId) {
+        log.info("Student {} fetching own submission for homework {}", studentId, homeworkId);
+
+        HomeworkSubmission submission = submissionRepository.findByHomeworkIdAndStudentId(homeworkId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
+
         return mapToResponse(submission);
     }
 
@@ -95,6 +116,27 @@ public class HomeworkSubmissionService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public List<PendingSubmissionResponse> getPendingSubmissions(UUID instructorId) {
+        log.info("Fetching pending submissions for instructor {}", instructorId);
+        return submissionRepository.findPendingByInstructorId(instructorId).stream()
+                .map(s -> PendingSubmissionResponse.builder()
+                        .submissionId(s.getId())
+                        .homeworkId(s.getHomework().getId())
+                        .lessonId(s.getHomework().getLesson().getId())
+                        .courseId(s.getHomework().getLesson().getCourse().getId())
+                        .homeworkTitle(s.getHomework().getTitle())
+                        .lessonTitle(s.getHomework().getLesson().getTitle())
+                        .courseName(s.getHomework().getLesson().getCourse().getName())
+                        .studentFirstName(s.getStudent().getFirstName())
+                        .studentLastName(s.getStudent().getLastName())
+                        .githubUrl(s.getGithubUrl())
+                        .submittedAt(s.getSubmittedAt())
+                        .isLate(s.getIsLate())
+                        .build())
+                .toList();
+    }
+
     @Transactional
     public SubmissionResponse gradeSubmission(UUID submissionId, GradeSubmissionRequest request, UUID instructorId) {
         log.info("Grading submission {} by instructor {}", submissionId, instructorId);
@@ -122,6 +164,10 @@ public class HomeworkSubmissionService {
 
         submission = submissionRepository.save(submission);
         log.info("Submission {} graded successfully", submissionId);
+
+        if (request.getGrade() != null) {
+            notificationService.notifyGrade(submission.getStudent(), submission.getHomework().getTitle(), request.getGrade());
+        }
 
         return mapToResponse(submission);
     }

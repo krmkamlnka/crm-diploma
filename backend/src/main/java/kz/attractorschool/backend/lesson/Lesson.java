@@ -8,6 +8,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -51,7 +53,8 @@ public class Lesson {
     private String recordingUrl;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false)
     @Builder.Default
     private LessonStatus status = LessonStatus.SCHEDULED;
 

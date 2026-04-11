@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Download, Video, FileText, ExternalLink, Upload, CheckCircle, Clock } from 'lucide-react'
+import api from '../../services/api'
 
 interface Material {
   id: string
@@ -13,7 +14,7 @@ interface Homework {
   title: string
   description: string
   deadline: string
-  taskFileUrl?: string
+  homeworkFileId?: string
   submittedUrl?: string
   isLate?: boolean
   grade?: number
@@ -38,19 +39,34 @@ interface StudentLessonDetailModalProps {
 
 export default function StudentLessonDetailModal({ lesson, onClose }: StudentLessonDetailModalProps) {
   const [homeworkUrl, setHomeworkUrl] = useState(lesson.homework?.submittedUrl || '')
+  const [submittedUrl, setSubmittedUrl] = useState(lesson.homework?.submittedUrl || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  const handleMaterialClick = async (material: Material) => {
+    setDownloadingId(material.id)
+    try {
+      const res = await api.get<{ downloadUrl: string }>(`/instructor/files/materials/${material.id}`)
+      window.open(res.data.downloadUrl, '_blank')
+    } catch {
+      alert('Не удалось получить ссылку на файл')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   const handleSubmitHomework = async () => {
-    if (!homeworkUrl.trim()) return
+    if (!homeworkUrl.trim() || !lesson.homework) return
 
     setIsSubmitting(true)
-    // TODO: Submit homework URL to backend
-    console.log('Submitting homework:', homeworkUrl)
-
-    setTimeout(() => {
+    try {
+      await api.post(`/student/homework/${lesson.homework.id}/submit`, { githubUrl: homeworkUrl })
+      setSubmittedUrl(homeworkUrl)
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Ошибка при отправке домашней работы')
+    } finally {
       setIsSubmitting(false)
-      alert('Домашняя работа успешно отправлена!')
-    }, 1000)
+    }
   }
 
   const isDeadlinePassed = lesson.homework
@@ -104,18 +120,21 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
               </h3>
               <div className="space-y-2">
                 {lesson.materials.map((material) => (
-                  <a
+                  <button
                     key={material.id}
-                    href={material.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => handleMaterialClick(material)}
+                    disabled={downloadingId === material.id}
+                    className="w-full flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
                   >
                     <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    <span className="flex-1 font-medium text-gray-900 dark:text-gray-100">{material.name}</span>
+                    <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">{material.name}</span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">{material.type}</span>
-                    <Download className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                  </a>
+                    {downloadingId === material.id ? (
+                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
@@ -151,17 +170,22 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
               </div>
 
               {/* Task file */}
-              {lesson.homework.taskFileUrl && (
-                <a
-                  href={lesson.homework.taskFileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 mb-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              {lesson.homework.homeworkFileId && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await api.get<{ downloadUrl: string }>(`/instructor/files/homework/${lesson.homework!.homeworkFileId}/task`)
+                      window.open(res.data.downloadUrl, '_blank')
+                    } catch {
+                      alert('Не удалось получить ссылку на файл задания')
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 p-3 mb-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
                   <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <span className="flex-1 font-medium text-gray-900 dark:text-gray-100">Задание (ТЗ)</span>
+                  <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">Задание (ТЗ)</span>
                   <Download className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                </a>
+                </button>
               )}
 
               {/* Submit homework */}
@@ -179,10 +203,10 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
                         onChange={(e) => setHomeworkUrl(e.target.value)}
                         className="input-field pl-10"
                         placeholder="https://github.com/username/repository"
-                        disabled={!!lesson.homework.submittedUrl}
+                        disabled={!!submittedUrl}
                       />
                     </div>
-                    {!lesson.homework.submittedUrl && (
+                    {!submittedUrl && (
                       <button
                         onClick={handleSubmitHomework}
                         disabled={!homeworkUrl.trim() || isSubmitting}
@@ -202,7 +226,7 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
                       </button>
                     )}
                   </div>
-                  {lesson.homework.submittedUrl && (
+                  {submittedUrl && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                       <CheckCircle className="w-4 h-4" />
                       <span>Домашняя работа отправлена, ожидает проверки</span>
@@ -211,12 +235,12 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
                 </div>
               )}
 
-              {lesson.homework.grade !== undefined && lesson.homework.submittedUrl && (
+              {lesson.homework.grade !== undefined && submittedUrl && (
                 <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
                   <CheckCircle className="w-4 h-4" />
                   <span>Домашняя работа проверена</span>
                   <a
-                    href={lesson.homework.submittedUrl}
+                    href={submittedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-auto hover:underline flex items-center gap-1"

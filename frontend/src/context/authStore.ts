@@ -1,16 +1,14 @@
 import { create } from 'zustand'
 import { AuthState, User } from '../types'
-import { authService, LoginRequest, RegisterRequest, VerifyEmailRequest } from '../services/authService'
+import { authService, LoginRequest, RegisterRequest, tokenStorage } from '../services/authService'
 
 interface AuthStore extends AuthState {
   setUser: (user: User | null) => void
+  updateUser: (partial: Partial<User>) => void
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
-  register: (data: RegisterData) => Promise<{ email: string; message: string }>
-  verifyEmail: (email: string, code: string) => Promise<void>
+  register: (data: RegisterData) => Promise<void>
   checkAuth: () => Promise<void>
-  pendingVerificationEmail: string | null
-  setPendingVerificationEmail: (email: string | null) => void
 }
 
 export interface RegisterData {
@@ -18,18 +16,20 @@ export interface RegisterData {
   password: string
   firstName: string
   lastName: string
-  invitationCode: string
+  phone?: string
+  invitationToken?: string
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
-  isLoading: false,
-  pendingVerificationEmail: null,
+  isLoading: true, // Start with true to check auth on mount
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
 
-  setPendingVerificationEmail: (email) => set({ pendingVerificationEmail: email }),
+  updateUser: (partial) => set((state) => ({
+    user: state.user ? { ...state.user, ...partial } : null,
+  })),
 
   login: async (email: string, password: string) => {
     console.log('[AuthStore] Starting login...')
@@ -39,15 +39,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const response = await authService.login(loginData)
 
       console.log('[AuthStore] Login successful, user:', response.user)
-      console.log('[AuthStore] Setting user in store...')
 
       set({
         user: response.user,
         isAuthenticated: true,
         isLoading: false
       })
-
-      console.log('[AuthStore] User set in store, isAuthenticated:', true)
     } catch (error) {
       console.error('[AuthStore] Login error:', error)
       set({ isLoading: false })
@@ -56,74 +53,54 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    console.log('[AuthStore] Starting logout...')
     try {
       await authService.logout()
     } catch (error) {
-      console.error('Logout error:', error)
+      console.error('[AuthStore] Logout error:', error)
     } finally {
       set({ user: null, isAuthenticated: false })
     }
   },
 
   register: async (data: RegisterData) => {
-    set({ isLoading: true })
+    console.log('[AuthStore] Starting registration...')
     try {
       const registerData: RegisterRequest = {
         email: data.email,
         password: data.password,
         firstName: data.firstName,
         lastName: data.lastName,
-        invitationToken: data.invitationCode || undefined,
+        phone: data.phone || undefined,
+        invitationToken: data.invitationToken || undefined,
       }
 
-      console.log('AuthStore: Sending register request with data:', registerData)
-      const response = await authService.register(registerData)
-      console.log('AuthStore: Received register response:', response)
-      set({ isLoading: false })
-
-      return {
-        email: response.email,
-        message: response.message,
-      }
+      await authService.register(registerData)
+      console.log('[AuthStore] Registration successful, awaiting email verification')
     } catch (error) {
-      console.error('AuthStore: Registration error:', error)
-      set({ isLoading: false })
-      throw error
-    }
-  },
-
-  verifyEmail: async (email: string, code: string) => {
-    set({ isLoading: true })
-    try {
-      const verifyData: VerifyEmailRequest = {
-        email,
-        verificationCode: code,
-      }
-
-      const response = await authService.verifyEmail(verifyData)
-
-      set({
-        user: response.user,
-        isAuthenticated: true,
-        isLoading: false
-      })
-    } catch (error) {
-      console.error('Email verification error:', error)
-      set({ isLoading: false })
+      console.error('[AuthStore] Registration error:', error)
       throw error
     }
   },
 
   checkAuth: async () => {
-    console.log('[AuthStore] checkAuth called')
+    console.log('[AuthStore] Checking authentication...')
+
+    // First check if we have a token
+    if (!tokenStorage.getAccessToken()) {
+      console.log('[AuthStore] No token found, user not authenticated')
+      set({ user: null, isAuthenticated: false, isLoading: false })
+      return
+    }
+
     set({ isLoading: true })
     try {
-      console.log('[AuthStore] Fetching current user from /auth/me...')
       const user = await authService.getCurrentUser()
-      console.log('[AuthStore] checkAuth success, user:', user)
+      console.log('[AuthStore] Auth check successful, user:', user)
       set({ user, isAuthenticated: true, isLoading: false })
     } catch (error) {
-      console.log('[AuthStore] checkAuth failed:', error)
+      console.log('[AuthStore] Auth check failed:', error)
+      tokenStorage.clearTokens()
       set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },

@@ -3,6 +3,7 @@ package kz.attractorschool.backend.submission;
 import jakarta.validation.Valid;
 import kz.attractorschool.backend.security.CustomUserDetails;
 import kz.attractorschool.backend.submission.dto.GradeSubmissionRequest;
+import kz.attractorschool.backend.submission.dto.PendingSubmissionResponse;
 import kz.attractorschool.backend.submission.dto.SubmissionListResponse;
 import kz.attractorschool.backend.submission.dto.SubmissionResponse;
 import kz.attractorschool.backend.submission.dto.SubmitHomeworkRequest;
@@ -14,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -40,6 +42,37 @@ public class HomeworkSubmissionController {
 
         SubmissionResponse response = submissionService.submitHomework(homeworkId, request, userDetails.getId());
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    /**
+     * Получить свою сданную работу по заданию (для студента)
+     * GET /api/v1/student/homework/:homeworkId/my-submission
+     */
+    @GetMapping("/student/homework/{homeworkId}/my-submission")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<SubmissionResponse> getMySubmission(
+            @PathVariable UUID homeworkId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        log.info("GET /api/v1/student/homework/{}/my-submission - Student {} fetching own submission",
+                homeworkId, userDetails.getId());
+
+        SubmissionResponse response = submissionService.getMySubmission(homeworkId, userDetails.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Непроверенные работы преподавателя
+     * GET /api/v1/instructor/pending-submissions
+     */
+    @GetMapping("/instructor/pending-submissions")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PendingSubmissionResponse>> getPendingSubmissions(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        log.info("GET /api/v1/instructor/pending-submissions - instructor {}", userDetails.getId());
+        List<PendingSubmissionResponse> response = submissionService.getPendingSubmissions(userDetails.getId());
+        return ResponseEntity.ok(response);
     }
 
     /**

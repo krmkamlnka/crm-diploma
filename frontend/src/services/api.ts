@@ -1,16 +1,41 @@
-import axios from 'axios'
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 const api = axios.create({
   baseURL: '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Enable cookies for cross-origin requests
 })
 
-// Request interceptor for logging
+// Token storage keys (same as in authService)
+const TOKEN_KEY = 'accessToken'
+const REFRESH_TOKEN_KEY = 'refreshToken'
+
+// Flag to prevent multiple refresh attempts
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: Error) => void
+}> = []
+
+const processQueue = (error: Error | null, token: string | null = null) => {
+  failedQueue.forEach((promise) => {
+    if (error) {
+      promise.reject(error)
+    } else if (token) {
+      promise.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+// Request interceptor - add Authorization header
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     console.log('API Request:', config.method?.toUpperCase(), config.url, config.data)
     return config
   },
@@ -20,18 +45,84 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor for handling errors and logging
+// Response interceptor - handle errors and token refresh
 api.interceptors.response.use(
   (response) => {
-    console.log('API Response:', response.config.method?.toUpperCase(), response.config.url, response.status, response.data)
+    console.log('API Response:', response.config.method?.toUpperCase(), response.config.url, response.status)
     return response
   },
-  (error) => {
-    console.error('API Response Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status, error.response?.data)
-    if (error.response?.status === 401) {
-      // Handle unauthorized access - cookies will be cleared by backend
-      window.location.href = '/login'
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    console.error(
+      'API Response Error:',
+      originalRequest?.method?.toUpperCase(),
+      originalRequest?.url,
+      error.response?.status,
+      error.response?.data
+    )
+
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      // Don't try to refresh if we're already on auth endpoints
+      if (originalRequest.url?.includes('/auth/')) {
+        return Promise.reject(error)
+      }
+
+      if (isRefreshing) {
+        // Queue the request while refreshing
+        return new Promise<string>((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then((token) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+            }
+            return api(originalRequest)
+          })
+          .catch((err) => {
+            return Promise.reject(err)
+          })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+      if (!refreshToken) {
+        // No refresh token - redirect to login
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
+
+      try {
+        const response = await axios.post('/api/v1/auth/refresh', {
+          refreshToken
+        })
+
+        const { accessToken, refreshToken: newRefreshToken } = response.data
+        localStorage.setItem(TOKEN_KEY, accessToken)
+        localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken)
+
+        processQueue(null, accessToken)
+
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`
+        }
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError as Error, null)
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
+
     return Promise.reject(error)
   }
 )

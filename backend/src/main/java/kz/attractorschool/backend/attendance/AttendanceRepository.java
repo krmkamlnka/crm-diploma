@@ -34,4 +34,25 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     long countByLessonId(@Param("lessonId") UUID lessonId);
 
     boolean existsByLessonIdAndStudentId(UUID lessonId, UUID studentId);
+
+    /**
+     * Все записи посещаемости для конкретного курса (для аналитики).
+     */
+    @Query("SELECT a FROM Attendance a " +
+           "JOIN FETCH a.lesson l " +
+           "JOIN FETCH a.student s " +
+           "WHERE l.course.id = :courseId " +
+           "ORDER BY l.scheduledAt ASC")
+    List<Attendance> findAllByCourseId(@Param("courseId") UUID courseId);
+
+    /**
+     * Количество уроков с посещаемостью PRESENT или LATE для студента в курсе.
+     */
+    @Query(value = "SELECT COUNT(a.id) FROM attendance a " +
+                   "JOIN lessons l ON l.id = a.lesson_id " +
+                   "WHERE l.course_id = :courseId AND a.student_id = :studentUserId " +
+                   "AND a.status IN ('PRESENT', 'LATE')",
+           nativeQuery = true)
+    long countAttendedByStudentAndCourse(@Param("studentUserId") UUID studentUserId,
+                                         @Param("courseId") UUID courseId);
 }

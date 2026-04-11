@@ -22,7 +22,9 @@ public class UserDTO {
     private String email;
     private String firstName;
     private String lastName;
+    private String phone;
     private UserRole role;
+    private String profilePhotoUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Boolean isEmailVerified;
@@ -36,7 +38,9 @@ public class UserDTO {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .phone(user.getPhone())
                 .role(user.getRole())
+                .profilePhotoUrl(user.getProfilePhotoUrl())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .isEmailVerified(user.getIsEmailVerified())

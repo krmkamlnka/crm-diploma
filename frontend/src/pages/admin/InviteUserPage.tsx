@@ -1,156 +1,219 @@
-import { useState } from 'react'
-import { UserPlus, Mail, Send } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { UserPlus, Mail, Send, Trash2, GraduationCap, Users, Shield } from 'lucide-react'
+import api from '../../services/api'
+import { UserRole } from '../../types'
+import { ListItemSkeleton } from '../../components/common/Skeleton'
+import EmptyState from '../../components/common/EmptyState'
+import FormField from '../../components/common/FormField'
+import ConfirmDialog from '../../components/common/ConfirmDialog'
+import Toaster from '../../components/common/Toaster'
+import { useToast } from '../../hooks/useToast'
+
+interface Invitation {
+  id: string
+  email: string
+  role: UserRole
+  expiresAt: string
+  isUsed: boolean
+  createdAt: string
+}
+
+const ROLES: { value: UserRole; label: string; desc: string; icon: typeof GraduationCap }[] = [
+  { value: 'STUDENT', label: 'Студент', desc: 'Доступ к курсам', icon: GraduationCap },
+  { value: 'INSTRUCTOR', label: 'Преподаватель', desc: 'Управление курсами', icon: Users },
+  { value: 'ADMIN', label: 'Администратор', desc: 'Полный доступ', icon: Shield },
+]
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  SUPER_ADMIN: 'Супер-админ',
+  ADMIN: 'Администратор',
+  INSTRUCTOR: 'Преподаватель',
+  STUDENT: 'Студент',
+}
+
+function formatRelativeDate(dateString: string) {
+  const d = new Date(dateString)
+  const now = new Date()
+  const diffDays = Math.round((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays === 0) return 'Сегодня'
+  if (diffDays === 1) return 'Вчера'
+  return `${diffDays} дн. назад`
+}
 
 export default function InviteUserPage() {
+  const { toasts, show: showToast, dismiss } = useToast()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<'admin' | 'instructor' | 'student'>('student')
+  const [role, setRole] = useState<UserRole>('STUDENT')
   const [isLoading, setIsLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [isLoadingList, setIsLoadingList] = useState(true)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  useEffect(() => { loadInvitations() }, [])
+
+  const loadInvitations = async () => {
+    setIsLoadingList(true)
+    try {
+      const res = await api.get<Invitation[]>('/admin/invitations')
+      setInvitations(res.data)
+    } catch {
+      showToast('Не удалось загрузить приглашения', 'error')
+    } finally {
+      setIsLoadingList(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setSuccess(false)
-
-    // TODO: Replace with actual API call
-    setTimeout(() => {
-      setIsLoading(false)
-      setSuccess(true)
+    try {
+      await api.post('/admin/invitations', { email, role })
+      showToast(`Приглашение отправлено на ${email}`, 'success')
       setEmail('')
-      setTimeout(() => setSuccess(false), 3000)
-    }, 1000)
+      await loadInvitations()
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Ошибка при отправке приглашения', 'error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    try {
+      await api.delete(`/admin/invitations/${deleteId}`)
+      setInvitations((prev) => prev.filter((i) => i.id !== deleteId))
+      showToast('Приглашение удалено', 'success')
+    } catch {
+      showToast('Ошибка при удалении', 'error')
+    } finally {
+      setDeleteId(null)
+    }
   }
 
   return (
-    <div className="max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Пригласить пользователя</h1>
-        <p className="text-gray-600 mt-2">Отправьте приглашение новому пользователю</p>
-      </div>
+    <>
+      <Toaster toasts={toasts} dismiss={dismiss} />
 
-      <div className="card">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-            <UserPlus className="w-6 h-6 text-primary-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Новое приглашение</h2>
-            <p className="text-sm text-gray-600">Пользователь получит email с кодом для регистрации</p>
-          </div>
+      <div className="max-w-2xl space-y-6 animate-fadeSlideDown">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Пригласить пользователя</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Отправьте приглашение по email</p>
         </div>
 
-        {success && (
-          <div className="mb-6 bg-green-50 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
-            <Send className="w-5 h-5" />
-            <span>Приглашение успешно отправлено!</span>
-          </div>
-        )}
+        <div className="card space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <FormField label="Email адрес" required>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-field pl-10"
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+            </FormField>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email адрес
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input-field pl-10"
-                placeholder="user@example.com"
-                required
-              />
-            </div>
-          </div>
+            <FormField label="Роль пользователя">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-0.5">
+                {ROLES.map(({ value, label, desc, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRole(value)}
+                    className={`p-3.5 border-2 rounded-xl transition-all text-left ${
+                      role === value
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <Icon className={`w-5 h-5 mb-2 ${role === value ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`} />
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>
+                  </button>
+                ))}
+              </div>
+            </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Роль пользователя
-            </label>
-            <div className="grid grid-cols-3 gap-4">
-              <button
-                type="button"
-                onClick={() => setRole('student')}
-                className={`p-4 border-2 rounded-lg transition-all ${
-                  role === 'student'
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-center">
-                  <p className="font-medium text-gray-900">Студент</p>
-                  <p className="text-xs text-gray-500 mt-1">Доступ к курсам</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setRole('instructor')}
-                className={`p-4 border-2 rounded-lg transition-all ${
-                  role === 'instructor'
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-center">
-                  <p className="font-medium text-gray-900">Преподаватель</p>
-                  <p className="text-xs text-gray-500 mt-1">Управление курсами</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setRole('admin')}
-                className={`p-4 border-2 rounded-lg transition-all ${
-                  role === 'admin'
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-center">
-                  <p className="font-medium text-gray-900">Администратор</p>
-                  <p className="text-xs text-gray-500 mt-1">Полный доступ</p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="btn-primary flex items-center gap-2"
-            >
+            <button type="submit" disabled={isLoading} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               <Send className="w-4 h-4" />
               {isLoading ? 'Отправка...' : 'Отправить приглашение'}
             </button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
 
-      <div className="card mt-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Недавние приглашения</h3>
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">user{i}@example.com</p>
-                <p className="text-sm text-gray-500">Отправлено {i} дн. назад</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  Студент
-                </span>
-                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                  Ожидает
-                </span>
-              </div>
+        {/* Invitations list */}
+        <div className="card">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Отправленные приглашения</h3>
+
+          {isLoadingList ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} />)}
             </div>
-          ))}
+          ) : invitations.length === 0 ? (
+            <EmptyState
+              icon={UserPlus}
+              title="Нет активных приглашений"
+              description="Здесь появятся отправленные вами приглашения"
+            />
+          ) : (
+            <div className="space-y-2">
+              {invitations.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 bg-primary-50 dark:bg-primary-900/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Mail className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{inv.email}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{formatRelativeDate(inv.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400">
+                      {ROLE_LABEL[inv.role]}
+                    </span>
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                      inv.isUsed
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
+                    }`}>
+                      {inv.isUsed ? 'Использовано' : 'Ожидает'}
+                    </span>
+                    {!inv.isUsed && (
+                      <button
+                        onClick={() => setDeleteId(inv.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Удалить"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      {deleteId && (
+        <ConfirmDialog
+          title="Удалить приглашение?"
+          message="Ссылка для регистрации станет недействительной."
+          confirmLabel="Удалить"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteId(null)}
+        />
+      )}
+    </>
   )
 }

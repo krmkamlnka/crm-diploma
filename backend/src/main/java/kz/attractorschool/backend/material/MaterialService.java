@@ -12,6 +12,7 @@ import kz.attractorschool.backend.material.dto.UploadMaterialsResponse;
 import kz.attractorschool.backend.shared.exception.BadRequestException;
 import kz.attractorschool.backend.shared.exception.ForbiddenException;
 import kz.attractorschool.backend.shared.exception.ResourceNotFoundException;
+import kz.attractorschool.backend.student.StudentRepository;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
@@ -36,6 +37,7 @@ public class MaterialService {
     private final MaterialRepository materialRepository;
     private final LessonRepository lessonRepository;
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
     private final MinioClient minioClient;
 
     @Value("${minio.bucket-name}")
@@ -121,6 +123,7 @@ public class MaterialService {
         log.info("Material {} deleted successfully", materialId);
     }
 
+    @Transactional(readOnly = true)
     public String getDownloadUrl(UUID materialId, UUID userId) {
         log.info("Generating download URL for material {} by user {}", materialId, userId);
 
@@ -131,10 +134,11 @@ public class MaterialService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        UUID courseId = material.getLesson().getCourse().getId();
         boolean hasAccess = user.getRole() == UserRole.ADMIN
                 || user.getRole() == UserRole.SUPER_ADMIN
-                || material.getLesson().getCourse().getInstructor().getId().equals(userId);
-        // TODO: добавить проверку на студентов, записанных на курс
+                || material.getLesson().getCourse().getInstructor().getId().equals(userId)
+                || studentRepository.existsByUserIdAndCourseId(userId, courseId);
 
         if (!hasAccess) {
             throw new ForbiddenException("You do not have access to this material");

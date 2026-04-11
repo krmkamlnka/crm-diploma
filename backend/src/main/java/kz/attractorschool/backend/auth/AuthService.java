@@ -7,6 +7,9 @@ import kz.attractorschool.backend.auth.dto.RegisterRequest;
 import kz.attractorschool.backend.auth.dto.VerifyEmailRequest;
 import kz.attractorschool.backend.security.CustomUserDetails;
 import kz.attractorschool.backend.security.JwtTokenProvider;
+import kz.attractorschool.backend.invitation.Invitation;
+import kz.attractorschool.backend.invitation.InvitationRepository;
+import kz.attractorschool.backend.notification.NotificationService;
 import kz.attractorschool.backend.shared.email.EmailService;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
@@ -21,7 +24,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,9 +39,11 @@ import java.util.UUID;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final InvitationRepository invitationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailService emailService;
+    private final NotificationService notificationService;
 
     /**
      * Регистрация нового пользователя
@@ -51,11 +58,25 @@ public class AuthService {
 
         // Проверка существования пользователя
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Пользователь с таким email уже существует");
+            throw new kz.attractorschool.backend.shared.exception.ConflictException("Пользователь с таким email уже существует");
         }
 
         // Генерация 6-значного кода верификации
-        String verificationCode = String.format("%06d", (int)(Math.random() * 1000000));
+        String verificationCode = String.format("%06d", new SecureRandom().nextInt(1_000_000));
+
+        // Определить роль: из приглашения (если есть) или из запроса, или по умолчанию STUDENT
+        UserRole role = UserRole.STUDENT;
+        Invitation invitation = null;
+        if (request.getInvitationToken() != null && !request.getInvitationToken().isBlank()) {
+            invitation = invitationRepository.findByToken(request.getInvitationToken())
+                    .orElse(null);
+            if (invitation != null && !invitation.getIsUsed()
+                    && LocalDateTime.now().isBefore(invitation.getExpiresAt())) {
+                role = invitation.getRole();
+            }
+        } else if (request.getRole() != null) {
+            role = request.getRole();
+        }
 
         // Создание нового пользователя
         User user = User.builder()
@@ -64,7 +85,7 @@ public class AuthService {
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .phone(request.getPhone())
-                .role(request.getRole() != null ? request.getRole() : UserRole.STUDENT)
+                .role(role)
                 .status(UserStatus.ACTIVE)
                 .isEmailVerified(false)
                 .emailVerificationToken(verificationCode)
@@ -74,6 +95,13 @@ public class AuthService {
         user = userRepository.save(user);
         log.info("Пользователь успешно зарегистрирован с ID: {}", user.getId());
 
+        // Отметить приглашение как использованное
+        if (invitation != null) {
+            invitation.setIsUsed(true);
+            invitationRepository.save(invitation);
+            log.info("Приглашение отмечено как использованное: {}", invitation.getToken());
+        }
+
         // Отправить email с кодом верификации
         emailService.sendVerificationEmail(
                 user.getEmail(),
@@ -81,6 +109,10 @@ public class AuthService {
                 user.getEmailVerificationToken()
         );
         log.info("Email верификации отправлен на: {}", user.getEmail());
+
+        // Уведомить всех администраторов о новом пользователе
+        List<User> admins = userRepository.findAllAdmins();
+        notificationService.notifyNewUserRegistered(admins, user.getFirstName(), user.getLastName(), role.name());
 
         return Map.of(
                 "email", user.getEmail(),

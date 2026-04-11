@@ -1,85 +1,130 @@
-import { useState } from 'react'
-import { X, Upload, FileText, Trash2, AlertCircle } from 'lucide-react'
-
-interface Lesson {
-  id: string
-  courseId: string
-  courseName: string
-  title: string
-  date: string
-  time: string
-}
+import { useState, useRef } from 'react'
+import { X, Paperclip, BookOpen, Trash2 } from 'lucide-react'
+import api from '../../services/api'
 
 interface CreateLessonModalProps {
   courseId: string
   courseName: string
   selectedDate: string
-  existingLessons: Lesson[]
   onClose: () => void
-  onSave: () => void
-}
-
-interface FileUpload {
-  id: string
-  name: string
-  file: File
+  onSave: (lesson: any) => void
 }
 
 export default function CreateLessonModal({
   courseId,
   courseName,
   selectedDate,
-  existingLessons,
   onClose,
   onSave,
 }: CreateLessonModalProps) {
+  // Lesson fields
   const [title, setTitle] = useState('')
   const [time, setTime] = useState('14:00')
-  const [materials, setMaterials] = useState<FileUpload[]>([])
-  const [homework, setHomework] = useState<FileUpload | null>(null)
+  const [description, setDescription] = useState('')
+  const [location, setLocation] = useState('')
+  const [onlineMeetingUrl, setOnlineMeetingUrl] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState(120)
 
-  const hasConflict = existingLessons.some((lesson) => {
-    const lessonTime = parseInt(lesson.time.split(':')[0])
-    const newTime = parseInt(time.split(':')[0])
-    return Math.abs(lessonTime - newTime) < 2 // Конфликт если разница меньше 2 часов
-  })
+  // Materials
+  const [materialFiles, setMaterialFiles] = useState<File[]>([])
+  const materialInputRef = useRef<HTMLInputElement>(null)
 
-  const handleMaterialUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files) {
-      const newMaterials = Array.from(files).map((file) => ({
-        id: Math.random().toString(),
-        name: file.name,
-        file,
-      }))
-      setMaterials([...materials, ...newMaterials])
-    }
+  // Homework
+  const [hwEnabled, setHwEnabled] = useState(false)
+  const [hwTitle, setHwTitle] = useState('')
+  const [hwDescription, setHwDescription] = useState('')
+  const [hwDeadline, setHwDeadline] = useState('')
+  const [hwFile, setHwFile] = useState<File | null>(null)
+  const hwInputRef = useRef<HTMLInputElement>(null)
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleMaterialFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    setMaterialFiles(prev => [...prev, ...files])
+    e.target.value = ''
   }
 
-  const handleHomeworkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setHomework({
-        id: Math.random().toString(),
-        name: file.name,
-        file,
-      })
-    }
+  const removeMaterialFile = (index: number) => {
+    setMaterialFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const removeMaterial = (id: string) => {
-    setMaterials(materials.filter((m) => m.id !== id))
+  const handleHwFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setHwFile(e.target.files?.[0] ?? null)
+    e.target.value = ''
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} Б`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (hasConflict) {
-      alert('Выберите другое время - есть конфликт с другим занятием!')
-      return
+    setLoading(true)
+    setError(null)
+    try {
+      // Step 1: Create the lesson
+      const res = await api.post(`/instructor/courses/${courseId}/lessons`, {
+        title,
+        description: description || undefined,
+        scheduledAt: `${selectedDate}T${time}:00`,
+        durationMinutes,
+        location: location || undefined,
+        onlineMeetingUrl: onlineMeetingUrl || undefined,
+      })
+      const lesson = res.data
+      const lessonId = lesson.id
+
+      // Step 2: Upload materials if any
+      if (materialFiles.length > 0) {
+        const formData = new FormData()
+        materialFiles.forEach(f => formData.append('files', f))
+        await api.post(`/instructor/lessons/${lessonId}/materials`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      }
+
+      // Step 3: Create homework if enabled
+      if (hwEnabled && hwTitle && hwDescription && hwDeadline) {
+        const hwFormData = new FormData()
+        const hwData = {
+          title: hwTitle,
+          description: hwDescription,
+          deadline: `${hwDeadline}:00`,
+        }
+        hwFormData.append('homework', new Blob([JSON.stringify(hwData)], { type: 'application/json' }))
+        if (hwFile) {
+          hwFormData.append('taskFile', hwFile)
+        }
+        try {
+          await api.post(`/instructor/lessons/${lessonId}/homework`, hwFormData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+        } catch (hwErr: any) {
+          const hwMsg =
+            hwErr?.response?.data?.message ??
+            hwErr?.response?.data?.error ??
+            'Занятие создано, но ошибка при создании домашнего задания'
+          setError(hwMsg)
+          onSave(lesson)
+          return
+        }
+      }
+
+      onSave(lesson)
+      onClose()
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ??
+        err?.response?.data?.error ??
+        'Ошибка при создании занятия'
+      setError(msg)
+    } finally {
+      setLoading(false)
     }
-    // TODO: Upload files and save lesson
-    console.log('Creating lesson:', { courseId, title, date: selectedDate, time, materials, homework })
-    onSave()
   }
 
   return (
@@ -89,10 +134,11 @@ export default function CreateLessonModal({
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Создать занятие</h2>
             <p className="text-sm text-gray-600 mt-1">
-              {courseName} • {new Date(selectedDate).toLocaleDateString('ru-RU', {
+              {courseName} •{' '}
+              {new Date(selectedDate).toLocaleDateString('ru-RU', {
                 day: 'numeric',
                 month: 'long',
-                year: 'numeric'
+                year: 'numeric',
               })}
             </p>
           </div>
@@ -102,7 +148,13 @@ export default function CreateLessonModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Title */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Основные поля */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Название занятия *
@@ -117,7 +169,6 @@ export default function CreateLessonModal({
             />
           </div>
 
-          {/* Time */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Время начала *
@@ -129,114 +180,209 @@ export default function CreateLessonModal({
               className="input-field"
               required
             />
-            {hasConflict && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                <span>Конфликт с другим занятием в это время!</span>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Длительность (минут)
+            </label>
+            <input
+              type="number"
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(Number(e.target.value))}
+              className="input-field"
+              min={1}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Описание
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input-field resize-none"
+              rows={3}
+              placeholder="Краткое описание занятия"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Место проведения
+            </label>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="input-field"
+              placeholder="Аудитория 101"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ссылка на онлайн-встречу
+            </label>
+            <input
+              type="url"
+              value={onlineMeetingUrl}
+              onChange={(e) => setOnlineMeetingUrl(e.target.value)}
+              className="input-field"
+              placeholder="https://zoom.us/j/..."
+            />
+          </div>
+
+          {/* Раздаточные материалы */}
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Paperclip className="w-5 h-5 text-gray-500" />
+              <span className="font-medium text-gray-900">Раздаточные материалы</span>
+              <span className="text-sm text-gray-500">(PDF, DOC, DOCX — до 50 МБ)</span>
+            </div>
+
+            {materialFiles.length > 0 && (
+              <div className="space-y-2">
+                {materialFiles.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                    <span className="text-gray-800 truncate flex-1">{f.name}</span>
+                    <span className="text-gray-500 mx-3 shrink-0">{formatFileSize(f.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeMaterialFile(i)}
+                      className="p-1 hover:bg-gray-200 rounded"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              ref={materialInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              multiple
+              className="hidden"
+              onChange={handleMaterialFilesChange}
+            />
+            <button
+              type="button"
+              onClick={() => materialInputRef.current?.click()}
+              className="btn-secondary text-sm flex items-center gap-2"
+            >
+              <Paperclip className="w-4 h-4" />
+              Прикрепить файлы
+            </button>
+          </div>
+
+          {/* Домашнее задание */}
+          <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hwEnabled}
+                onChange={(e) => setHwEnabled(e.target.checked)}
+                className="w-4 h-4 text-primary-600 rounded"
+              />
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-gray-500" />
+                <span className="font-medium text-gray-900">Добавить домашнее задание</span>
+              </div>
+            </label>
+
+            {hwEnabled && (
+              <div className="space-y-4 pt-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Название задания *
+                  </label>
+                  <input
+                    type="text"
+                    value={hwTitle}
+                    onChange={(e) => setHwTitle(e.target.value)}
+                    className="input-field"
+                    placeholder="Практическая работа №1"
+                    required={hwEnabled}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Описание задания *
+                  </label>
+                  <textarea
+                    value={hwDescription}
+                    onChange={(e) => setHwDescription(e.target.value)}
+                    className="input-field resize-none"
+                    rows={3}
+                    placeholder="Что нужно сделать..."
+                    required={hwEnabled}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Срок сдачи *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={hwDeadline}
+                    onChange={(e) => setHwDeadline(e.target.value)}
+                    className="input-field"
+                    required={hwEnabled}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Файл задания (PDF, DOC, DOCX — до 50 МБ)
+                  </label>
+                  {hwFile ? (
+                    <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                      <span className="text-gray-800 truncate flex-1">{hwFile.name}</span>
+                      <span className="text-gray-500 mx-3">{formatFileSize(hwFile.size)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setHwFile(null)}
+                        className="p-1 hover:bg-gray-200 rounded"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        ref={hwInputRef}
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="hidden"
+                        onChange={handleHwFileChange}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => hwInputRef.current?.click()}
+                        className="btn-secondary text-sm flex items-center gap-2"
+                      >
+                        <Paperclip className="w-4 h-4" />
+                        Прикрепить файл
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Existing lessons at this date */}
-          {existingLessons.length > 0 && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm font-medium text-yellow-900 mb-2">Занятия в этот день:</p>
-              <div className="space-y-1">
-                {existingLessons.map((lesson) => (
-                  <div key={lesson.id} className="text-xs text-yellow-800">
-                    {lesson.time} - {lesson.title} ({lesson.courseName})
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Materials upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Раздаточные материалы (PDF, DOCX)
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary-400 transition-colors">
-                <Upload className="w-5 h-5 text-gray-400" />
-                <span className="text-sm text-gray-600">Загрузить файлы</span>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleMaterialUpload}
-                  className="hidden"
-                />
-              </label>
-
-              {materials.length > 0 && (
-                <div className="space-y-2">
-                  {materials.map((material) => (
-                    <div
-                      key={material.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-900">{material.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeMaterial(material.id)}
-                        className="p-1 hover:bg-gray-200 rounded"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Homework upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              ТЗ для домашней работы (PDF, DOCX)
-            </label>
-            <div className="space-y-2">
-              {!homework ? (
-                <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary-400 transition-colors">
-                  <Upload className="w-5 h-5 text-gray-400" />
-                  <span className="text-sm text-gray-600">Загрузить задание</span>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={handleHomeworkUpload}
-                    className="hidden"
-                  />
-                </label>
-              ) : (
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm text-blue-900">{homework.name}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setHomework(null)}
-                    className="p-1 hover:bg-blue-100 rounded"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Buttons */}
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              disabled={hasConflict}
+              disabled={loading}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Создать занятие
+              {loading ? 'Создание...' : 'Создать занятие'}
             </button>
             <button type="button" onClick={onClose} className="btn-secondary flex-1">
               Отмена

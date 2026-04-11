@@ -22,37 +22,19 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
     Page<Lesson> findByCourseId(@Param("courseId") UUID courseId, Pageable pageable);
 
     /**
-     * КРИТИЧЕСКИЙ МЕТОД: Проверка конфликтов расписания уроков
-     *
-     * Бизнес-правило: Не допускается создание урока, если в пределах 2 часов
-     * до или после уже есть другой урок для того же курса.
-     *
-     * Логика проверки:
-     * 1. Новый урок начинается в scheduledAt и заканчивается в (scheduledAt + durationMinutes)
-     * 2. Проверяем, нет ли уроков, которые пересекаются с окном [scheduledAt - 2 часа, endTime + 2 часа]
-     *
-     * @param courseId ID курса
-     * @param scheduledAt Время начала нового урока
-     * @param durationMinutes Продолжительность нового урока
-     * @param excludeLessonId ID урока, который нужно исключить из проверки (для обновления)
-     * @return Список конфликтующих уроков
+     * Проверка пересечения уроков одного курса по времени.
+     * Конфликт = новый урок [newStart, newEnd) пересекается с существующим [l.scheduledAt, l.scheduledAt + duration).
+     * Условие пересечения: newStart < existingEnd AND newEnd > existingStart
      */
     @Query("SELECT l FROM Lesson l WHERE l.course.id = :courseId " +
             "AND (:excludeLessonId IS NULL OR l.id <> :excludeLessonId) " +
             "AND l.status <> 'CANCELLED' " +
-            "AND (" +
-            "  (l.scheduledAt >= :windowStart AND l.scheduledAt < :windowEnd) " +
-            "  OR " +
-            "  (FUNCTION('TIMESTAMPADD', MINUTE, l.durationMinutes, l.scheduledAt) > :windowStart " +
-            "   AND FUNCTION('TIMESTAMPADD', MINUTE, l.durationMinutes, l.scheduledAt) <= :windowEnd) " +
-            "  OR " +
-            "  (l.scheduledAt < :windowStart " +
-            "   AND FUNCTION('TIMESTAMPADD', MINUTE, l.durationMinutes, l.scheduledAt) > :windowEnd)" +
-            ")")
+            "AND :newStart < FUNCTION('TIMESTAMPADD', MINUTE, l.durationMinutes, l.scheduledAt) " +
+            "AND :newEnd > l.scheduledAt")
     List<Lesson> findConflictingLessons(
             @Param("courseId") UUID courseId,
-            @Param("windowStart") LocalDateTime windowStart,
-            @Param("windowEnd") LocalDateTime windowEnd,
+            @Param("newStart") LocalDateTime newStart,
+            @Param("newEnd") LocalDateTime newEnd,
             @Param("excludeLessonId") UUID excludeLessonId
     );
 
@@ -73,4 +55,11 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     @Query("SELECT COUNT(l) FROM Lesson l WHERE l.course.id = :courseId")
     Long countByCourseId(@Param("courseId") UUID courseId);
+
+    @Query("SELECT l FROM Lesson l " +
+            "WHERE l.course.id IN (" +
+            "  SELECT s.course.id FROM Student s WHERE s.user.id = :userId" +
+            ") " +
+            "ORDER BY l.scheduledAt ASC")
+    List<Lesson> findAllByStudentUserId(@Param("userId") UUID userId);
 }

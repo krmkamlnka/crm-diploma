@@ -1,9 +1,11 @@
 package kz.attractorschool.backend.course;
 
 import jakarta.validation.Valid;
+import kz.attractorschool.backend.course.dto.CourseAnalyticsResponse;
 import kz.attractorschool.backend.course.dto.CourseResponse;
 import kz.attractorschool.backend.course.dto.CreateCourseRequest;
 import kz.attractorschool.backend.course.dto.UpdateCourseRequest;
+import kz.attractorschool.backend.user.UserRole;
 import kz.attractorschool.backend.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ import java.util.UUID;
 public class CourseController {
 
     private final CourseService courseService;
+    private final CourseAnalyticsService courseAnalyticsService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN')")
@@ -69,6 +72,18 @@ public class CourseController {
 
         log.info("PATCH /api/v1/instructor/courses/{} - Updating course by user {}", courseId, userDetails.getId());
         CourseResponse response = courseService.updateCourse(courseId, request, userDetails.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{courseId}/analytics")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<CourseAnalyticsResponse> getCourseAnalytics(
+            @PathVariable UUID courseId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        log.info("GET /api/v1/instructor/courses/{}/analytics - requested by user {}", courseId, userDetails.getId());
+        UserRole role = userDetails.getUser().getRole();
+        CourseAnalyticsResponse response = courseAnalyticsService.getCourseAnalytics(courseId, userDetails.getId(), role);
         return ResponseEntity.ok(response);
     }
 

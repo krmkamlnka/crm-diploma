@@ -20,19 +20,35 @@ import java.util.UUID;
  * Доступно только для администраторов
  */
 @RestController
-@RequestMapping("/api/v1/admin/invitations")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
 public class InvitationController {
 
     private final InvitationService invitationService;
 
     /**
+     * Публичный endpoint для получения email по токену приглашения
+     * GET /api/v1/invitations/by-token/{token}
+     */
+    @GetMapping("/api/v1/invitations/by-token/{token}")
+    public ResponseEntity<java.util.Map<String, String>> getInvitationByToken(@PathVariable String token) {
+        log.info("GET /api/v1/invitations/by-token/{} - Public lookup", token);
+        Invitation invitation = invitationService.findByToken(token);
+        if (invitation.getIsUsed()) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "Приглашение уже использовано"));
+        }
+        if (java.time.LocalDateTime.now().isAfter(invitation.getExpiresAt())) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "Срок действия приглашения истек"));
+        }
+        return ResponseEntity.ok(java.util.Map.of("email", invitation.getEmail()));
+    }
+
+    /**
      * Создать новое приглашение
      * POST /api/v1/admin/invitations
      */
-    @PostMapping
+    @PostMapping("/api/v1/admin/invitations")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<InvitationResponse> createInvitation(
             @Valid @RequestBody CreateInvitationRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
@@ -52,7 +68,8 @@ public class InvitationController {
      * Получить список всех приглашений
      * GET /api/v1/admin/invitations
      */
-    @GetMapping
+    @GetMapping("/api/v1/admin/invitations")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<List<InvitationResponse>> getAllInvitations() {
         log.info("GET /api/v1/admin/invitations - Fetching all invitations");
 
@@ -65,7 +82,8 @@ public class InvitationController {
      * Удалить приглашение
      * DELETE /api/v1/admin/invitations/:id
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/api/v1/admin/invitations/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<Void> deleteInvitation(@PathVariable UUID id) {
         log.info("DELETE /api/v1/admin/invitations/{} - Deleting invitation", id);
 
