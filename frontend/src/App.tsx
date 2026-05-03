@@ -1,6 +1,7 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
-import { useAuthStore } from './context/authStore'
+import { useAuthStore, proactiveRefresh } from './context/authStore'
+import SessionExpiredModal from './components/common/SessionExpiredModal'
 
 // Layout components
 import MainLayout from './components/layout/MainLayout'
@@ -38,17 +39,32 @@ import DeadlinesPage from './pages/student/DeadlinesPage'
 import StudentSettingsPage from './pages/student/SettingsPage'
 
 function App() {
-  const { isAuthenticated, user, checkAuth, isLoading } = useAuthStore()
+  const { isAuthenticated, user, checkAuth, isCheckingAuth, sessionExpired, markSessionExpired } = useAuthStore()
 
   // Check authentication status on app mount only once
   useEffect(() => {
-    console.log('[App] Initial auth check')
     checkAuth()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Show loading spinner while checking auth
-  if (isLoading) {
+  // Listen for session:expired event dispatched by api.ts interceptor
+  useEffect(() => {
+    const handler = () => markSessionExpired()
+    window.addEventListener('session:expired', handler)
+    return () => window.removeEventListener('session:expired', handler)
+  }, [markSessionExpired])
+
+  // Proactive token refresh on user activity
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
+    const handler = () => proactiveRefresh()
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }))
+    return () => events.forEach(e => window.removeEventListener(e, handler))
+  }, [isAuthenticated])
+
+  // Show loading spinner only during initial auth check
+  if (isCheckingAuth) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary-600 border-t-transparent"></div>
@@ -97,6 +113,7 @@ function App() {
 
   return (
     <Router>
+      {sessionExpired && <SessionExpiredModalWrapper />}
       <Routes>
         {/* Public routes - always light theme */}
         <Route path="/login" element={<AuthLayout><LoginPage /></AuthLayout>} />
@@ -298,6 +315,18 @@ function App() {
       </Routes>
     </Router>
   )
+}
+
+function SessionExpiredModalWrapper() {
+  const { clearSessionExpired } = useAuthStore()
+  const navigate = useNavigate()
+
+  const handleLogin = () => {
+    clearSessionExpired()
+    navigate('/login', { replace: true })
+  }
+
+  return <SessionExpiredModal onLogin={handleLogin} />
 }
 
 export default App

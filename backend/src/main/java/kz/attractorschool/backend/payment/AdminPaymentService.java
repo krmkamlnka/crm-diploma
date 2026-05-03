@@ -1,18 +1,22 @@
 package kz.attractorschool.backend.payment;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.criteria.*;
 import kz.attractorschool.backend.notification.NotificationService;
 import kz.attractorschool.backend.payment.dto.AdminPaymentPageResponse;
 import kz.attractorschool.backend.payment.dto.AdminPaymentResponse;
 import kz.attractorschool.backend.payment.dto.MarkPaidRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -21,20 +25,71 @@ public class AdminPaymentService {
 
     private final StudentPaymentRepository paymentRepository;
     private final NotificationService notificationService;
+    private final EntityManager em;
 
-    public AdminPaymentPageResponse getPayments(UUID courseId, int page, int size) {
-        PageRequest pageable = PageRequest.of(page, size);
-        Page<StudentPayment> result = courseId != null
-                ? paymentRepository.findAllByCourseIdWithDetails(courseId, pageable)
-                : paymentRepository.findAllWithDetails(pageable);
+    @Transactional(readOnly = true)
+    public AdminPaymentPageResponse getPayments(UUID courseId, String search, LocalDate dateFrom, LocalDate dateTo, int page, int size, String sortDir) {
+        String searchParam = (search != null && !search.isBlank()) ? search.trim().toLowerCase() : null;
+
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+
+        // ── Count query ──────────────────────────────────────────
+        CriteriaQuery<Long> countQ = cb.createQuery(Long.class);
+        Root<StudentPayment> countRoot = countQ.from(StudentPayment.class);
+        countQ.select(cb.count(countRoot));
+        countQ.where(buildPredicates(cb, countRoot, courseId, searchParam, dateFrom, dateTo));
+        long total = em.createQuery(countQ).getSingleResult();
+
+        // ── Data query ───────────────────────────────────────────
+        CriteriaQuery<StudentPayment> dataQ = cb.createQuery(StudentPayment.class);
+        Root<StudentPayment> root = dataQ.from(StudentPayment.class);
+        root.fetch("student", JoinType.LEFT);
+        root.fetch("course", JoinType.LEFT);
+        dataQ.select(root).distinct(true);
+        dataQ.where(buildPredicates(cb, root, courseId, searchParam, dateFrom, dateTo));
+        if ("desc".equalsIgnoreCase(sortDir)) {
+            dataQ.orderBy(cb.desc(root.get("dueDate")));
+        } else {
+            dataQ.orderBy(cb.asc(root.get("dueDate")));
+        }
+
+        TypedQuery<StudentPayment> query = em.createQuery(dataQ);
+        query.setFirstResult(page * size);
+        query.setMaxResults(size);
+        List<StudentPayment> content = query.getResultList();
+
+        int totalPages = size == 0 ? 1 : (int) Math.ceil((double) total / size);
 
         return AdminPaymentPageResponse.builder()
-                .content(result.getContent().stream().map(this::toAdminPaymentResponse).toList())
-                .page(result.getNumber())
-                .size(result.getSize())
-                .totalElements(result.getTotalElements())
-                .totalPages(result.getTotalPages())
+                .content(content.stream().map(this::toAdminPaymentResponse).toList())
+                .page(page)
+                .size(size)
+                .totalElements(total)
+                .totalPages(totalPages)
                 .build();
+    }
+
+    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<StudentPayment> root,
+                                        UUID courseId, String search, LocalDate dateFrom, LocalDate dateTo) {
+        List<Predicate> predicates = new ArrayList<>();
+
+        if (courseId != null) {
+            predicates.add(cb.equal(root.get("course").get("id"), courseId));
+        }
+        if (search != null) {
+            Expression<String> fullName = cb.lower(cb.concat(cb.concat(root.get("student").get("firstName"), " "), root.get("student").get("lastName")));
+            Expression<String> email = cb.lower(root.get("student").get("email"));
+            String pattern = "%" + search + "%";
+            predicates.add(cb.or(cb.like(fullName, pattern), cb.like(email, pattern)));
+        }
+        if (dateFrom != null) {
+            predicates.add(cb.greaterThanOrEqualTo(root.get("dueDate"), dateFrom));
+        }
+        if (dateTo != null) {
+            predicates.add(cb.lessThanOrEqualTo(root.get("dueDate"), dateTo));
+        }
+
+        return predicates.toArray(new Predicate[0]);
     }
 
     @Transactional

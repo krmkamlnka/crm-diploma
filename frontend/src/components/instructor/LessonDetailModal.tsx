@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Video, CheckCircle, XCircle, ExternalLink, Pencil, Paperclip, Trash2, BookOpen, Github, Star, RotateCcw } from 'lucide-react'
+import { X, Video, CheckCircle, XCircle, ExternalLink, Pencil, Paperclip, Trash2, BookOpen, Github, Star, RotateCcw, Plus } from 'lucide-react'
 import api from '../../services/api'
 
 interface LessonDetailModalProps {
@@ -73,7 +73,9 @@ interface SubmissionWithStudent {
 interface HomeworkInfo {
   id: string
   title: string
+  description: string
   deadline: string
+  taskFileUrl?: string
 }
 
 interface SubmissionListResponse {
@@ -115,6 +117,16 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
   // which submission rows are in edit-grade mode
   const [editingGradeIds, setEditingGradeIds] = useState<Set<string>>(new Set())
 
+  // Homework edit/create in edit mode
+  const [hwEditMode, setHwEditMode] = useState<'none' | 'edit' | 'create'>('none')
+  const [hwTitle, setHwTitle] = useState('')
+  const [hwDescription, setHwDescription] = useState('')
+  const [hwDeadline, setHwDeadline] = useState('')
+  const [hwNewFile, setHwNewFile] = useState<File | null>(null)
+  const [hwSaving, setHwSaving] = useState(false)
+  const [hwDeleting, setHwDeleting] = useState(false)
+  const hwFileInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true)
@@ -124,14 +136,8 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
           api.get(`/instructor/students?courseId=${lesson.courseId}&size=100`),
           api.get(`/instructor/lessons/${lesson.id}`),
           api.get<MaterialResponse[]>(`/instructor/lessons/${lesson.id}/materials`),
+          api.get<HomeworkInfo>(`/instructor/lessons/${lesson.id}/homework`).catch(() => null),
         ]
-
-        if (lesson.hasHomework) {
-          requests.push(
-            api.get<HomeworkInfo>(`/instructor/lessons/${lesson.id}/homework`)
-              .catch(() => null)
-          )
-        }
 
         const results = await Promise.all(requests)
         const [attendanceRes, studentsRes, lessonRes, materialsRes, homeworkRes] = results
@@ -179,7 +185,7 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
       }
     }
     fetchData()
-  }, [lesson.id, lesson.courseId, lesson.hasHomework])
+  }, [lesson.id, lesson.courseId])
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} Б`
@@ -318,6 +324,82 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
       next.delete(submissionId)
       return next
     })
+  }
+
+  const openHwCreate = () => {
+    setHwTitle('')
+    setHwDescription('')
+    setHwDeadline('')
+    setHwNewFile(null)
+    setHwEditMode('create')
+  }
+
+  const openHwEdit = () => {
+    if (!homework) return
+    setHwTitle(homework.title)
+    setHwDescription(homework.description)
+    // convert ISO datetime to datetime-local value (strip seconds)
+    setHwDeadline(homework.deadline.slice(0, 16))
+    setHwNewFile(null)
+    setHwEditMode('edit')
+  }
+
+  const cancelHwEdit = () => {
+    setHwEditMode('none')
+    setHwNewFile(null)
+    setError(null)
+  }
+
+  const handleSaveHomework = async () => {
+    if (!hwTitle.trim() || !hwDescription.trim() || !hwDeadline) {
+      setError('Заполните все обязательные поля домашнего задания')
+      return
+    }
+    setHwSaving(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      const hwData = { title: hwTitle, description: hwDescription, deadline: `${hwDeadline}:00` }
+      formData.append('homework', new Blob([JSON.stringify(hwData)], { type: 'application/json' }))
+      if (hwNewFile) formData.append('taskFile', hwNewFile)
+
+      if (hwEditMode === 'create') {
+        const res = await api.post(`/instructor/lessons/${lesson.id}/homework`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        setHomework(res.data)
+        onSave()
+      } else if (hwEditMode === 'edit' && homework) {
+        const res = await api.patch(`/instructor/homework/${homework.id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        setHomework(res.data)
+        onSave()
+      }
+      setHwEditMode('none')
+      setHwNewFile(null)
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при сохранении домашнего задания')
+    } finally {
+      setHwSaving(false)
+    }
+  }
+
+  const handleDeleteHomework = async () => {
+    if (!homework) return
+    setHwDeleting(true)
+    setError(null)
+    try {
+      await api.delete(`/instructor/homework/${homework.id}`)
+      setHomework(null)
+      setSubmissions([])
+      setHwEditMode('none')
+      onSave()
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Ошибка при удалении домашнего задания')
+    } finally {
+      setHwDeleting(false)
+    }
   }
 
   // map userId -> submission for quick lookup
@@ -527,13 +609,155 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
                 </button>
               </div>
 
+              {/* Домашнее задание */}
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-gray-500" />
+                    <span className="font-medium text-gray-900 dark:text-gray-100">Домашнее задание</span>
+                  </div>
+                  {hwEditMode === 'none' && (
+                    homework ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={openHwEdit}
+                          className="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteHomework}
+                          disabled={hwDeleting}
+                          className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {hwDeleting ? 'Удаление...' : 'Удалить'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={openHwCreate}
+                        className="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Добавить
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {hwEditMode === 'none' && homework && (
+                  <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <p className="font-medium text-gray-800 dark:text-gray-200">{homework.title}</p>
+                    <p>{homework.description}</p>
+                    <p className="text-xs">Дедлайн: {new Date(homework.deadline).toLocaleString('ru-RU')}</p>
+                    {homework.taskFileUrl && (
+                      <p className="text-xs text-primary-600 dark:text-primary-400">Файл задания прикреплён</p>
+                    )}
+                  </div>
+                )}
+
+                {hwEditMode === 'none' && !homework && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500">Домашнее задание не создано</p>
+                )}
+
+                {(hwEditMode === 'edit' || hwEditMode === 'create') && (
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Название <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={hwTitle}
+                        onChange={(e) => setHwTitle(e.target.value)}
+                        className="input-field"
+                        placeholder="Практическая работа №1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Описание <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={hwDescription}
+                        onChange={(e) => setHwDescription(e.target.value)}
+                        className="input-field resize-none"
+                        rows={3}
+                        placeholder="Что нужно сделать..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Срок сдачи <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={hwDeadline}
+                        onChange={(e) => setHwDeadline(e.target.value)}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Файл задания (PDF, DOC, DOCX — до 50 МБ)
+                      </label>
+                      {hwNewFile ? (
+                        <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">
+                          <span className="text-gray-800 dark:text-gray-200 truncate flex-1">{hwNewFile.name}</span>
+                          <span className="text-gray-500 mx-3">{formatFileSize(hwNewFile.size)}</span>
+                          <button type="button" onClick={() => setHwNewFile(null)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            ref={hwFileInputRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx"
+                            className="hidden"
+                            onChange={(e) => { setHwNewFile(e.target.files?.[0] ?? null); e.target.value = '' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => hwFileInputRef.current?.click()}
+                            className="btn-secondary text-sm flex items-center gap-2"
+                          >
+                            <Paperclip className="w-4 h-4" />
+                            {hwEditMode === 'edit' ? 'Заменить файл' : 'Прикрепить файл'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveHomework}
+                        disabled={hwSaving}
+                        className="btn-primary text-sm flex-1 disabled:opacity-50"
+                      >
+                        {hwSaving ? 'Сохранение...' : hwEditMode === 'create' ? 'Создать ДЗ' : 'Сохранить ДЗ'}
+                      </button>
+                      <button type="button" onClick={cancelHwEdit} className="btn-secondary text-sm flex-1">
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={isSaving} className="btn-primary flex-1 disabled:opacity-50">
                   {isSaving ? 'Сохранение...' : 'Сохранить'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setEditMode(false); setError(null); setNewFiles([]) }}
+                  onClick={() => { setEditMode(false); setError(null); setNewFiles([]); setHwEditMode('none') }}
                   className="btn-secondary flex-1"
                 >
                   Отмена

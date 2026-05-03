@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @RestController
@@ -21,9 +22,13 @@ public class AdminPaymentController {
     @GetMapping
     public ResponseEntity<AdminPaymentPageResponse> getPayments(
             @RequestParam(required = false) UUID courseId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(adminPaymentService.getPayments(courseId, page, size));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sort) {
+        return ResponseEntity.ok(adminPaymentService.getPayments(courseId, search, dateFrom, dateTo, page, size, sort));
     }
 
     @PatchMapping("/{paymentId}/mark-paid")

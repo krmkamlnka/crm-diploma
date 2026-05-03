@@ -28,4 +28,5 @@ public interface StudentPaymentRepository extends JpaRepository<StudentPayment, 
 
     @Query("SELECT p FROM StudentPayment p JOIN FETCH p.student JOIN FETCH p.course ORDER BY p.dueDate DESC")
     Page<StudentPayment> findAllWithDetails(Pageable pageable);
+
 }

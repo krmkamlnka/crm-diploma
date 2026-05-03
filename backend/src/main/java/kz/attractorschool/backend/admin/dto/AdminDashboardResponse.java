@@ -23,6 +23,9 @@ public class AdminDashboardResponse {
     // Recent registrations
     private List<RecentUserDto> recentRegistrations;
 
+    // Course list for tooltip
+    private List<CourseDto> courseList;
+
     @Data
     @Builder
     public static class RecentUserDto {
@@ -32,5 +35,15 @@ public class AdminDashboardResponse {
         private String email;
         private String role;
         private String profilePhotoUrl;
+        private String status;
+        private String createdAt;
+    }
+
+    @Data
+    @Builder
+    public static class CourseDto {
+        private String id;
+        private String name;
+        private Integer enrolledStudents;
     }
 }

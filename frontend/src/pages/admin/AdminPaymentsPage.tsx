@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit, Trash2, X, RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Edit, Trash2, X, RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight, ArrowUpDown, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
 
 interface CourseOption {
@@ -45,12 +46,6 @@ interface AdminPaymentPage {
   totalPages: number
 }
 
-const FREQUENCY_LABELS: Record<string, string> = {
-  ONE_TIME: 'Разовый',
-  MONTHLY: 'Ежемесячно',
-  QUARTERLY: 'Ежеквартально',
-}
-
 const MONTH_NAMES = [
   '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
@@ -60,6 +55,7 @@ const formatAmount = (amount: number, currency = 'KZT') =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency, minimumFractionDigits: 0 }).format(amount)
 
 export default function AdminPaymentsPage() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<'rules' | 'payments'>('rules')
 
   // ── Rules state ──────────────────────────────────────────────
@@ -85,6 +81,10 @@ export default function AdminPaymentsPage() {
   const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [paymentsError, setPaymentsError] = useState('')
   const [courseFilter, setCourseFilter] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [currentPage, setCurrentPage] = useState(0)
 
   const [markPaidModalOpen, setMarkPaidModalOpen] = useState(false)
@@ -108,22 +108,28 @@ export default function AdminPaymentsPage() {
       setRules(rulesRes.data)
       setCourses(coursesRes.data)
     } catch {
-      setError('Не удалось загрузить данные')
+      setError(t('admin.payments.errorLoad'))
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchPayments = useCallback(async (page: number, courseId: string) => {
+  const fetchPayments = useCallback(async (
+    page: number, courseId: string, search: string,
+    from: string, to: string, sort: 'asc' | 'desc'
+  ) => {
     setPaymentsLoading(true)
     setPaymentsError('')
     try {
-      const params = new URLSearchParams({ page: String(page), size: '20' })
+      const params = new URLSearchParams({ page: String(page), size: '10', sort })
       if (courseId) params.set('courseId', courseId)
+      if (search.trim()) params.set('search', search.trim())
+      if (from) params.set('dateFrom', from)
+      if (to) params.set('dateTo', to)
       const res = await api.get<AdminPaymentPage>(`/admin/payments?${params}`)
       setPaymentsData(res.data)
     } catch {
-      setPaymentsError('Не удалось загрузить платежи')
+      setPaymentsError(t('admin.payments.errorLoadPayments'))
     } finally {
       setPaymentsLoading(false)
     }
@@ -131,9 +137,9 @@ export default function AdminPaymentsPage() {
 
   useEffect(() => {
     if (activeTab === 'payments') {
-      fetchPayments(currentPage, courseFilter)
+      fetchPayments(currentPage, courseFilter, studentSearch, dateFrom, dateTo, sortDir)
     }
-  }, [activeTab, currentPage, courseFilter, fetchPayments])
+  }, [activeTab, currentPage, courseFilter, studentSearch, dateFrom, dateTo, sortDir, fetchPayments])
 
   // ── Rules handlers ───────────────────────────────────────────
   const openCreateModal = () => {
@@ -193,21 +199,21 @@ export default function AdminPaymentsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Удалить правило оплаты?')) return
+    if (!confirm(t('admin.payments.confirmDeleteRule'))) return
     try {
       await api.delete(`/admin/payment-rules/${id}`)
       setRules(prev => prev.filter(r => r.id !== id))
     } catch {
-      alert('Не удалось удалить правило')
+      alert(t('admin.payments.errorDelete'))
     }
   }
 
   const handleGenerate = async (id: string) => {
     try {
       await api.post(`/admin/payment-rules/${id}/generate`)
-      alert('Платежи успешно сгенерированы для всех студентов курса')
+      alert(t('admin.payments.paymentsGenerated'))
     } catch {
-      alert('Не удалось сгенерировать платежи')
+      alert(t('admin.payments.errorGenerate'))
     }
   }
 
@@ -233,14 +239,14 @@ export default function AdminPaymentsPage() {
       } : prev)
       setMarkPaidModalOpen(false)
     } catch {
-      alert('Не удалось отметить платёж как оплаченный')
+      alert(t('admin.payments.errorMarkPaid'))
     } finally {
       setMarkPaidLoading(false)
     }
   }
 
   const handleMarkUnpaid = async (payment: AdminPayment) => {
-    if (!confirm(`Сбросить оплату для ${payment.studentFirstName} ${payment.studentLastName}?`)) return
+    if (!confirm(t('admin.payments.confirmMarkUnpaid', { name: `${payment.studentFirstName} ${payment.studentLastName}` }))) return
     try {
       const res = await api.patch<AdminPayment>(`/admin/payments/${payment.id}/mark-unpaid`)
       setPaymentsData(prev => prev ? {
@@ -248,7 +254,7 @@ export default function AdminPaymentsPage() {
         content: prev.content.map(p => p.id === payment.id ? res.data : p),
       } : prev)
     } catch {
-      alert('Не удалось сбросить статус платежа')
+      alert(t('admin.payments.errorMarkUnpaid'))
     }
   }
 
@@ -259,17 +265,17 @@ export default function AdminPaymentsPage() {
     const overdue = payment.status !== 'COMPLETED' && new Date(payment.dueDate) < new Date()
     if (payment.status === 'COMPLETED') return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-medium">
-        <CheckCircle className="w-3 h-3" /> Оплачен
+        <CheckCircle className="w-3 h-3" /> {t('admin.payments.statusPaid')}
       </span>
     )
     if (overdue) return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-full text-xs font-medium">
-        <XCircle className="w-3 h-3" /> Просрочен
+        <XCircle className="w-3 h-3" /> {t('admin.payments.statusOverdue')}
       </span>
     )
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-full text-xs font-medium">
-        Ожидает
+        {t('admin.payments.statusPending')}
       </span>
     )
   }
@@ -278,13 +284,13 @@ export default function AdminPaymentsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Управление оплатой</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Настройка стоимости и управление платежами студентов</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('admin.payments.title')}</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">{t('admin.payments.subtitle')}</p>
         </div>
         {activeTab === 'rules' && (
           <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            Добавить правило
+            {t('admin.payments.addRule')}
           </button>
         )}
       </div>
@@ -293,8 +299,8 @@ export default function AdminPaymentsPage() {
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex gap-1">
           {[
-            { key: 'rules', label: 'Правила оплаты' },
-            { key: 'payments', label: 'Платежи студентов' },
+            { key: 'rules', label: t('admin.payments.tabRules') },
+            { key: 'payments', label: t('admin.payments.tabPayments') },
           ].map(tab => (
             <button
               key={tab.key}
@@ -316,25 +322,25 @@ export default function AdminPaymentsPage() {
         <>
           <div className="card">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
-              Правила оплаты по курсам
+              {t('admin.payments.rulesTitle')}
             </h2>
 
             {loading ? (
-              <div className="text-center py-8 text-gray-500">Загрузка...</div>
+              <div className="text-center py-8 text-gray-500">{t('admin.payments.loading')}</div>
             ) : error ? (
               <div className="text-center py-8 text-red-500">{error}</div>
             ) : rules.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">Правила оплаты не найдены</div>
+              <div className="text-center py-8 text-gray-500">{t('admin.payments.noRules')}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Курс</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Стоимость</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Периодичность</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Срок оплаты</th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Действия</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colCourse')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colAmount')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colFrequency')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colDueDate')}</th>
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -349,16 +355,16 @@ export default function AdminPaymentsPage() {
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-700 dark:text-gray-300">{FREQUENCY_LABELS[rule.frequency] || rule.frequency}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{t(`admin.payments.${rule.frequency === 'ONE_TIME' ? 'oneTime' : rule.frequency === 'MONTHLY' ? 'monthly' : 'quarterly'}`)}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-700 dark:text-gray-300">{rule.dueDay} число каждого месяца</span>
+                          <span className="text-gray-700 dark:text-gray-300">{t('admin.payments.dueDayLabel', { day: rule.dueDay })}</span>
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleGenerate(rule.id)}
-                              title="Применить к студентам"
+                              title={t('admin.payments.applyToStudents')}
                               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                             >
                               <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -386,12 +392,12 @@ export default function AdminPaymentsPage() {
           </div>
 
           <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Как это работает</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('admin.payments.howItWorks')}</h3>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-              <li>Для каждого курса можно установить стоимость обучения в месяц</li>
-              <li>Укажите день месяца, до которого студенты должны вносить оплату</li>
-              <li>Система автоматически создаст платежи для всех студентов, записанных на курс</li>
-              <li>Отметить оплату по каждому студенту можно во вкладке «Платежи студентов»</li>
+              <li>{t('admin.payments.howItWorksTip1')}</li>
+              <li>{t('admin.payments.howItWorksTip2')}</li>
+              <li>{t('admin.payments.howItWorksTip3')}</li>
+              <li>{t('admin.payments.howItWorksTip4')}</li>
             </ul>
           </div>
         </>
@@ -401,48 +407,95 @@ export default function AdminPaymentsPage() {
       {activeTab === 'payments' && (
         <div className="card">
           {/* Filter bar */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-1 max-w-xs">
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            {/* Student search */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={studentSearch}
+                onChange={e => { setStudentSearch(e.target.value); setCurrentPage(0) }}
+                placeholder={t('admin.payments.searchStudent')}
+                className="input-field pl-9"
+              />
+            </div>
+
+            {/* Course filter */}
+            <div className="flex-1 min-w-[150px] max-w-xs">
               <select
                 value={courseFilter}
                 onChange={e => { setCourseFilter(e.target.value); setCurrentPage(0) }}
                 className="input-field"
               >
-                <option value="">Все курсы</option>
+                <option value="">{t('admin.payments.allCourses')}</option>
                 {courses.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
-            {courseFilter && (
+
+            {/* Date range */}
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => { setDateFrom(e.target.value); setCurrentPage(0) }}
+                className="input-field w-36 text-sm"
+                title={t('admin.payments.dateFrom')}
+              />
+              <span className="text-gray-400 text-sm">—</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={e => { setDateTo(e.target.value); setCurrentPage(0) }}
+                className="input-field w-36 text-sm"
+                title={t('admin.payments.dateTo')}
+              />
+            </div>
+
+            {/* Sort by date */}
+            <button
+              onClick={() => { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setCurrentPage(0) }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium
+                         bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700
+                         text-gray-600 dark:text-gray-400
+                         hover:border-gray-300 dark:hover:border-gray-600 transition-all shrink-0"
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              {sortDir === 'asc' ? t('admin.payments.sortEarlyFirst') : t('admin.payments.sortLateFirst')}
+            </button>
+
+            {/* Reset filters */}
+            {(courseFilter || studentSearch || dateFrom || dateTo) && (
               <button
-                onClick={() => { setCourseFilter(''); setCurrentPage(0) }}
-                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1"
+                onClick={() => { setCourseFilter(''); setStudentSearch(''); setDateFrom(''); setDateTo(''); setCurrentPage(0) }}
+                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center gap-1 shrink-0"
               >
-                <X className="w-4 h-4" /> Сбросить
+                <X className="w-4 h-4" /> {t('admin.payments.reset')}
               </button>
             )}
           </div>
 
           {paymentsLoading ? (
-            <div className="text-center py-12 text-gray-500">Загрузка...</div>
+            <div className="text-center py-12 text-gray-500">{t('admin.payments.loading')}</div>
           ) : paymentsError ? (
             <div className="text-center py-12 text-red-500">{paymentsError}</div>
           ) : !paymentsData || paymentsData.content.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">Платежи не найдены</div>
+            <div className="text-center py-12 text-gray-500">{t('admin.payments.noPayments')}</div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Студент</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Курс</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Период</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Сумма</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Срок</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Статус</th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Действия</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colStudent')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colCourse')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colPeriod')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colAmount')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colDeadline')}</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colStatus')}</th>
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{t('admin.payments.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -477,14 +530,14 @@ export default function AdminPaymentsPage() {
                                 onClick={() => openMarkPaidModal(payment)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
                               >
-                                <CheckCircle className="w-3.5 h-3.5" /> Отметить оплаченным
+                                <CheckCircle className="w-3.5 h-3.5" /> {t('admin.payments.markPaid')}
                               </button>
                             ) : (
                               <button
                                 onClick={() => handleMarkUnpaid(payment)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-lg transition-colors"
                               >
-                                <XCircle className="w-3.5 h-3.5" /> Отменить оплату
+                                <XCircle className="w-3.5 h-3.5" /> {t('admin.payments.markUnpaid')}
                               </button>
                             )}
                           </div>
@@ -496,44 +549,42 @@ export default function AdminPaymentsPage() {
               </div>
 
               {/* Pagination */}
-              {paymentsData.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Показано {paymentsData.content.length} из {paymentsData.totalElements}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                      disabled={currentPage === 0}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    {Array.from({ length: paymentsData.totalPages }, (_, i) => i)
-                      .filter(i => Math.abs(i - currentPage) <= 2)
-                      .map(i => (
-                        <button
-                          key={i}
-                          onClick={() => setCurrentPage(i)}
-                          className={`w-8 h-8 text-sm rounded-lg transition-colors ${
-                            i === currentPage
-                              ? 'bg-primary-600 text-white'
-                              : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
-                          }`}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(paymentsData.totalPages - 1, p + 1))}
-                      disabled={currentPage >= paymentsData.totalPages - 1}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {t('admin.payments.shown', { count: paymentsData.content.length, total: paymentsData.totalElements })}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: paymentsData.totalPages }, (_, i) => i)
+                    .filter(i => Math.abs(i - currentPage) <= 2)
+                    .map(i => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i)}
+                        className={`w-8 h-8 text-sm rounded-lg transition-colors ${
+                          i === currentPage
+                            ? 'bg-primary-600 text-white'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(paymentsData.totalPages - 1, p + 1))}
+                    disabled={currentPage >= paymentsData.totalPages - 1}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
@@ -545,7 +596,7 @@ export default function AdminPaymentsPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {editingRule ? 'Редактировать правило' : 'Добавить правило'}
+                {editingRule ? t('admin.payments.modalEditRule') : t('admin.payments.modalAddRule')}
               </h2>
               <button onClick={closeModal} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                 <X className="w-5 h-5" />
@@ -560,7 +611,7 @@ export default function AdminPaymentsPage() {
               {!editingRule && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Курс <span className="text-red-500">*</span>
+                    {t('admin.payments.colCourse')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.courseId}
@@ -568,7 +619,7 @@ export default function AdminPaymentsPage() {
                     className="input-field"
                     required
                   >
-                    <option value="">Выберите курс</option>
+                    <option value="">{t('admin.payments.selectCourse')}</option>
                     {courses.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
@@ -578,14 +629,14 @@ export default function AdminPaymentsPage() {
 
               {editingRule && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Курс</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('admin.payments.colCourse')}</label>
                   <input value={editingRule.courseName} disabled className="input-field bg-gray-50 dark:bg-gray-700" />
                 </div>
               )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Сумма (KZT) <span className="text-red-500">*</span>
+                  {t('admin.payments.amountKzt')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -600,7 +651,7 @@ export default function AdminPaymentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Периодичность <span className="text-red-500">*</span>
+                  {t('admin.payments.frequency')} <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.frequency}
@@ -608,15 +659,15 @@ export default function AdminPaymentsPage() {
                   className="input-field"
                   required
                 >
-                  <option value="MONTHLY">Ежемесячно</option>
-                  <option value="QUARTERLY">Ежеквартально</option>
-                  <option value="ONE_TIME">Разовый</option>
+                  <option value="MONTHLY">{t('admin.payments.monthly')}</option>
+                  <option value="QUARTERLY">{t('admin.payments.quarterly')}</option>
+                  <option value="ONE_TIME">{t('admin.payments.oneTime')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  День оплаты (число месяца) <span className="text-red-500">*</span>
+                  {t('admin.payments.dueDayMonth')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -631,23 +682,23 @@ export default function AdminPaymentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Описание
+                  {t('admin.payments.description')}
                 </label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
                   className="input-field"
-                  placeholder="Необязательно"
+                  placeholder={t('admin.payments.descriptionOptional')}
                 />
               </div>
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="btn-secondary flex-1">
-                  Отмена
+                  {t('admin.payments.cancel')}
                 </button>
                 <button type="submit" disabled={saveLoading} className="btn-primary flex-1">
-                  {saveLoading ? 'Сохранение...' : 'Сохранить'}
+                  {saveLoading ? t('admin.payments.saving') : t('admin.payments.save')}
                 </button>
               </div>
             </form>
@@ -660,7 +711,7 @@ export default function AdminPaymentsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Подтвердить оплату</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('admin.payments.modalMarkPaid')}</h2>
               <button
                 onClick={() => setMarkPaidModalOpen(false)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -684,7 +735,7 @@ export default function AdminPaymentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Дата оплаты (необязательно)
+                  {t('admin.payments.paidAtLabel')}
                 </label>
                 <input
                   type="datetime-local"
@@ -692,19 +743,19 @@ export default function AdminPaymentsPage() {
                   onChange={e => setMarkPaidForm(p => ({ ...p, paidAt: e.target.value }))}
                   className="input-field"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Если не указана, будет использована текущая дата</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('admin.payments.paidAtHint')}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Заметка (необязательно)
+                  {t('admin.payments.noteLabel')}
                 </label>
                 <input
                   type="text"
                   value={markPaidForm.note}
                   onChange={e => setMarkPaidForm(p => ({ ...p, note: e.target.value }))}
                   className="input-field"
-                  placeholder="Например: оплачено наличными"
+                  placeholder={t('admin.payments.notePlaceholder')}
                 />
               </div>
 
@@ -714,10 +765,10 @@ export default function AdminPaymentsPage() {
                   onClick={() => setMarkPaidModalOpen(false)}
                   className="btn-secondary flex-1"
                 >
-                  Отмена
+                  {t('admin.payments.cancel')}
                 </button>
                 <button type="submit" disabled={markPaidLoading} className="btn-primary flex-1 bg-emerald-600 hover:bg-emerald-700">
-                  {markPaidLoading ? 'Сохранение...' : 'Подтвердить'}
+                  {markPaidLoading ? t('admin.payments.saving') : t('admin.payments.confirm')}
                 </button>
               </div>
             </form>

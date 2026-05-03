@@ -7,6 +7,14 @@ interface ThemeStore {
   setTheme: (theme: 'light' | 'dark') => void
 }
 
+const applyTheme = (theme: 'light' | 'dark') => {
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+}
+
 // Read saved theme synchronously before first render to avoid flash
 const getSavedTheme = (): 'light' | 'dark' => {
   try {
@@ -17,14 +25,6 @@ const getSavedTheme = (): 'light' | 'dark' => {
     }
   } catch {}
   return 'light'
-}
-
-const applyTheme = (theme: 'light' | 'dark') => {
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
 }
 
 // Apply immediately on module load — before React renders
@@ -55,3 +55,9 @@ export const useThemeStore = create<ThemeStore>()(
     }
   )
 )
+
+// Keep DOM class in sync with store at all times — catches any rehydration
+// edge case where the store theme diverges from the <html> class.
+useThemeStore.subscribe((state) => {
+  applyTheme(state.theme)
+})

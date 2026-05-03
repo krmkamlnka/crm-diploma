@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { AuthState, User } from '../types'
 import { authService, LoginRequest, RegisterRequest, tokenStorage } from '../services/authService'
+import axios from 'axios'
 
 interface AuthStore extends AuthState {
   setUser: (user: User | null) => void
@@ -9,6 +10,9 @@ interface AuthStore extends AuthState {
   logout: () => Promise<void>
   register: (data: RegisterData) => Promise<void>
   checkAuth: () => Promise<void>
+  sessionExpired: boolean
+  markSessionExpired: () => void
+  clearSessionExpired: () => void
 }
 
 export interface RegisterData {
@@ -20,10 +24,54 @@ export interface RegisterData {
   invitationToken?: string
 }
 
+// Proactive token refresh — called on user activity when token is close to expiry.
+// Access token lives 15 min; we refresh if less than 3 min remain.
+const REFRESH_THRESHOLD_MS = 3 * 60 * 1000
+
+function getTokenExpiryMs(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp * 1000
+  } catch {
+    return 0
+  }
+}
+
+let lastActivityRefresh = 0
+
+export function proactiveRefresh() {
+  const accessToken = tokenStorage.getAccessToken()
+  const refreshToken = tokenStorage.getRefreshToken()
+  if (!accessToken || !refreshToken) return
+
+  const expiresAt = getTokenExpiryMs(accessToken)
+  const timeLeft = expiresAt - Date.now()
+  const now = Date.now()
+
+  // Debounce — don't refresh more than once per minute
+  if (now - lastActivityRefresh < 60_000) return
+  if (timeLeft > REFRESH_THRESHOLD_MS) return
+
+  lastActivityRefresh = now
+  axios.post('/api/v1/auth/refresh', { refreshToken })
+    .then((res) => {
+      tokenStorage.setTokens(res.data.accessToken, res.data.refreshToken)
+    })
+    .catch(() => {
+      // Refresh failed — session:expired will be dispatched by the response interceptor
+    })
+}
+
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
-  isLoading: true, // Start with true to check auth on mount
+  isLoading: false,
+  isCheckingAuth: true,
+  sessionExpired: false,
+
+  markSessionExpired: () => set({ sessionExpired: true, user: null, isAuthenticated: false }),
+  clearSessionExpired: () => set({ sessionExpired: false }),
+
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
 
@@ -86,22 +134,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
   checkAuth: async () => {
     console.log('[AuthStore] Checking authentication...')
 
-    // First check if we have a token
     if (!tokenStorage.getAccessToken()) {
       console.log('[AuthStore] No token found, user not authenticated')
-      set({ user: null, isAuthenticated: false, isLoading: false })
+      set({ user: null, isAuthenticated: false, isCheckingAuth: false })
       return
     }
 
-    set({ isLoading: true })
     try {
       const user = await authService.getCurrentUser()
       console.log('[AuthStore] Auth check successful, user:', user)
-      set({ user, isAuthenticated: true, isLoading: false })
+      set({ user, isAuthenticated: true, isCheckingAuth: false })
     } catch (error) {
       console.log('[AuthStore] Auth check failed:', error)
       tokenStorage.clearTokens()
-      set({ user: null, isAuthenticated: false, isLoading: false })
+      set({ user: null, isAuthenticated: false, isCheckingAuth: false })
     }
   },
 }))

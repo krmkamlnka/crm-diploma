@@ -50,6 +50,9 @@ public class GeminiService {
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(OPENROUTER_URL, entity, Map.class);
             return extractReply(response.getBody());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("OpenRouter API HTTP {} error: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Не удалось получить ответ от AI ассистента: " + e.getStatusCode());
         } catch (Exception e) {
             log.error("OpenRouter API error: {}", e.getMessage(), e);
             throw new RuntimeException("Не удалось получить ответ от AI ассистента");
@@ -128,6 +131,9 @@ public class GeminiService {
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(OPENROUTER_URL, entity, Map.class);
             return extractReply(response.getBody());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("OpenRouter API HTTP {} error (instructor): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Не удалось получить ответ от AI ассистента: " + e.getStatusCode());
         } catch (Exception e) {
             log.error("OpenRouter API error (instructor): {}", e.getMessage(), e);
             throw new RuntimeException("Не удалось получить ответ от AI ассистента");

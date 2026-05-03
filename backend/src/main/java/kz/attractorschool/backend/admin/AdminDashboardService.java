@@ -59,6 +59,18 @@ public class AdminDashboardService {
                         .email(u.getEmail())
                         .role(u.getRole().name())
                         .profilePhotoUrl(u.getProfilePhotoUrl())
+                        .status(u.getStatus() != null ? u.getStatus().name() : "ACTIVE")
+                        .createdAt(u.getCreatedAt() != null ? u.getCreatedAt().toString() : "")
+                        .build())
+                .toList();
+
+        // --- Course list ---
+        List<AdminDashboardResponse.CourseDto> courseList = courseRepository.findAll()
+                .stream()
+                .map(c -> AdminDashboardResponse.CourseDto.builder()
+                        .id(c.getId().toString())
+                        .name(c.getName())
+                        .enrolledStudents(c.getEnrolledStudents() != null ? c.getEnrolledStudents() : 0)
                         .build())
                 .toList();
 
@@ -71,6 +83,7 @@ public class AdminDashboardService {
                 .courseFillPercent(courseFillPercent)
                 .paidInvoicesPercent(paidInvoicesPercent)
                 .recentRegistrations(recent)
+                .courseList(courseList)
                 .build();
     }
 

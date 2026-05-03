@@ -57,7 +57,6 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
 
   const handleSubmitHomework = async () => {
     if (!homeworkUrl.trim() || !lesson.homework) return
-
     setIsSubmitting(true)
     try {
       await api.post(`/student/homework/${lesson.homework.id}/submit`, { githubUrl: homeworkUrl })
@@ -74,48 +73,60 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
     : false
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto
+                      shadow-[0_24px_64px_rgba(0,0,0,0.2)] border border-gray-100 dark:border-gray-800">
+
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800
+                        px-6 py-4 flex items-start justify-between rounded-t-2xl z-10">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{lesson.title}</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{lesson.title}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {lesson.courseName} • {new Date(lesson.date).toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
+                day: 'numeric', month: 'long', year: 'numeric',
               })} • {lesson.time}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-gray-400 dark:text-gray-500
+                       hover:bg-gray-100 dark:hover:bg-gray-800
+                       hover:text-gray-600 dark:hover:text-gray-300
+                       transition-all duration-200 shrink-0 ml-4"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Recording URL */}
+        <div className="p-6 space-y-5">
+
+          {/* Recording */}
           {lesson.recordingUrl && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                Видеозапись занятия
-              </h3>
-              <a
-                href={lesson.recordingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
-              >
-                <Video className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                <span className="font-medium text-purple-700 dark:text-purple-300">Посмотреть запись урока</span>
-                <ExternalLink className="w-4 h-4 ml-auto text-purple-600 dark:text-purple-400" />
-              </a>
-            </div>
+            <a
+              href={lesson.recordingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-4
+                         bg-purple-50 dark:bg-purple-900/20
+                         border border-purple-200 dark:border-purple-800/60
+                         rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30
+                         transition-colors group"
+            >
+              <div className="w-9 h-9 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center shrink-0">
+                <Video className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <span className="flex-1 font-medium text-purple-700 dark:text-purple-300 text-sm">
+                Посмотреть запись урока
+              </span>
+              <ExternalLink className="w-4 h-4 text-purple-400 dark:text-purple-500 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" />
+            </a>
           )}
 
           {/* Materials */}
           {lesson.materials.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2.5">
                 Раздаточные материалы
               </h3>
               <div className="space-y-2">
@@ -124,15 +135,21 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
                     key={material.id}
                     onClick={() => handleMaterialClick(material)}
                     disabled={downloadingId === material.id}
-                    className="w-full flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                    className="w-full flex items-center gap-3 p-3.5
+                               bg-gray-50 dark:bg-gray-800/60
+                               border border-gray-200 dark:border-gray-700/60
+                               rounded-xl text-left
+                               hover:bg-gray-100 dark:hover:bg-gray-800
+                               hover:border-gray-300 dark:hover:border-gray-600
+                               transition-all duration-150 disabled:opacity-50"
                   >
-                    <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">{material.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">{material.type}</span>
+                    <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
+                    <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{material.name}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 uppercase font-medium">{material.type}</span>
                     {downloadingId === material.id ? (
-                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 dark:border-t-gray-300 rounded-full animate-spin shrink-0" />
                     ) : (
-                      <Download className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                      <Download className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
                     )}
                   </button>
                 ))}
@@ -142,119 +159,138 @@ export default function StudentLessonDetailModal({ lesson, onClose }: StudentLes
 
           {/* Homework */}
           {lesson.homework && (
-            <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-6 bg-gray-50 dark:bg-gray-750">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {lesson.homework.title}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {lesson.homework.description}
-                  </p>
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700/60
+                            bg-gray-50 dark:bg-gray-800/40 overflow-hidden">
+              {/* HW header */}
+              <div className="flex items-start justify-between gap-3 p-4 pb-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">{lesson.homework.title}</h3>
+                  {lesson.homework.description && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{lesson.homework.description}</p>
+                  )}
                 </div>
                 {lesson.homework.grade !== undefined ? (
-                  <span className="flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm font-semibold flex-shrink-0">
-                    <CheckCircle className="w-4 h-4" />
+                  <span className="flex items-center gap-1.5 px-3 py-1.5
+                                   bg-blue-100 dark:bg-blue-500/15
+                                   text-blue-700 dark:text-blue-400
+                                   border border-blue-200 dark:border-blue-500/30
+                                   rounded-full text-xs font-semibold shrink-0">
+                    <CheckCircle className="w-3.5 h-3.5" />
                     Оценка: {lesson.homework.grade}%
                   </span>
                 ) : isDeadlinePassed ? (
-                  <span className="flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-sm font-medium flex-shrink-0">
-                    <Clock className="w-4 h-4" />
+                  <span className="flex items-center gap-1.5 px-3 py-1.5
+                                   bg-red-100 dark:bg-red-500/15
+                                   text-red-600 dark:text-red-400
+                                   border border-red-200 dark:border-red-500/30
+                                   rounded-full text-xs font-medium shrink-0">
+                    <Clock className="w-3.5 h-3.5" />
                     Просрочено
                   </span>
                 ) : (
-                  <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full text-sm font-medium flex-shrink-0">
+                  <span className="px-3 py-1.5
+                                   bg-orange-100 dark:bg-orange-500/15
+                                   text-orange-600 dark:text-orange-400
+                                   border border-orange-200 dark:border-orange-500/30
+                                   rounded-full text-xs font-medium shrink-0">
                     До {new Date(lesson.homework.deadline).toLocaleDateString('ru-RU')}
                   </span>
                 )}
               </div>
 
-              {/* Task file */}
-              {lesson.homework.homeworkFileId && (
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await api.get<{ downloadUrl: string }>(`/instructor/files/homework/${lesson.homework!.homeworkFileId}/task`)
-                      window.open(res.data.downloadUrl, '_blank')
-                    } catch {
-                      alert('Не удалось получить ссылку на файл задания')
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 p-3 mb-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">Задание (ТЗ)</span>
-                  <Download className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                </button>
-              )}
+              <div className="px-4 pb-4 space-y-3">
+                {/* Task file */}
+                {lesson.homework.homeworkFileId && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api.get<{ downloadUrl: string }>(`/instructor/files/homework/${lesson.homework!.homeworkFileId}/task`)
+                        window.open(res.data.downloadUrl, '_blank')
+                      } catch {
+                        alert('Не удалось получить ссылку на файл задания')
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 p-3
+                               bg-white dark:bg-gray-800
+                               border border-gray-200 dark:border-gray-700
+                               rounded-xl text-left
+                               hover:bg-gray-50 dark:hover:bg-gray-700/60
+                               transition-all duration-150"
+                  >
+                    <FileText className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                    <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">Задание (ТЗ)</span>
+                    <Download className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  </button>
+                )}
 
-              {/* Submit homework */}
-              {lesson.homework.grade === undefined && (
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Ссылка на GitHub репозиторий
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <Upload className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="url"
-                        value={homeworkUrl}
-                        onChange={(e) => setHomeworkUrl(e.target.value)}
-                        className="input-field pl-10"
-                        placeholder="https://github.com/username/repository"
-                        disabled={!!submittedUrl}
-                      />
-                    </div>
-                    {!submittedUrl && (
-                      <button
-                        onClick={handleSubmitHomework}
-                        disabled={!homeworkUrl.trim() || isSubmitting}
-                        className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Отправка...
-                          </>
-                        ) : (
-                          <>
+                {/* Submit */}
+                {lesson.homework.grade === undefined && (
+                  <div className="space-y-2.5">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Ссылка на GitHub репозиторий
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <Upload className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                        <input
+                          type="url"
+                          value={homeworkUrl}
+                          onChange={(e) => setHomeworkUrl(e.target.value)}
+                          className="input-field pl-9 text-sm"
+                          placeholder="https://github.com/username/repo"
+                          disabled={!!submittedUrl}
+                        />
+                      </div>
+                      {!submittedUrl && (
+                        <button
+                          onClick={handleSubmitHomework}
+                          disabled={!homeworkUrl.trim() || isSubmitting}
+                          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                        >
+                          {isSubmitting ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
                             <Upload className="w-4 h-4" />
-                            Отправить
-                          </>
-                        )}
-                      </button>
+                          )}
+                          {isSubmitting ? 'Отправка...' : 'Отправить'}
+                        </button>
+                      )}
+                    </div>
+                    {submittedUrl && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle className="w-4 h-4 shrink-0" />
+                        Домашняя работа отправлена, ожидает проверки
+                      </div>
                     )}
                   </div>
-                  {submittedUrl && (
-                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Домашняя работа отправлена, ожидает проверки</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
 
-              {lesson.homework.grade !== undefined && submittedUrl && (
-                <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Домашняя работа проверена</span>
-                  <a
-                    href={submittedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto hover:underline flex items-center gap-1"
-                  >
-                    Посмотреть решение
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              )}
+                {/* Checked */}
+                {lesson.homework.grade !== undefined && submittedUrl && (
+                  <div className="flex items-center gap-2 text-xs
+                                  text-blue-600 dark:text-blue-400
+                                  bg-blue-50 dark:bg-blue-500/10
+                                  border border-blue-100 dark:border-blue-500/20
+                                  rounded-xl px-3 py-2.5">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>Домашняя работа проверена</span>
+                    <a
+                      href={submittedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto hover:underline flex items-center gap-1 font-medium"
+                    >
+                      Посмотреть решение
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Close button */}
-          <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+          {/* Footer */}
+          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
             <button onClick={onClose} className="btn-secondary px-6">
               Закрыть
             </button>

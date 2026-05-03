@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
 import { useThemeStore } from '../../context/themeStore'
 import { useTranslation } from 'react-i18next'
@@ -14,6 +15,17 @@ export default function Header({ onMenuClick }: Props) {
   const { user, logout } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+
+  const getSettingsPath = () => {
+    switch (user?.role) {
+      case 'SUPER_ADMIN':
+      case 'ADMIN':      return '/admin/settings'
+      case 'INSTRUCTOR': return '/instructor/settings'
+      case 'STUDENT':    return '/student/settings'
+      default:           return '/'
+    }
+  }
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   // Кешируем уведомления на уровне Header — панель не теряет состояние при закрытии/открытии
@@ -87,8 +99,8 @@ export default function Header({ onMenuClick }: Props) {
           >
             <div className="transition-transform duration-300" style={{ transform: theme === 'dark' ? 'rotate(180deg)' : 'rotate(0deg)' }}>
               {theme === 'light'
-                ? <Moon size={17} />
-                : <Sun size={17} />
+                ? <Sun size={17} />
+                : <Moon size={17} />
               }
             </div>
           </button>
@@ -130,9 +142,15 @@ export default function Header({ onMenuClick }: Props) {
 
           {/* User avatar + logout */}
           <div className="flex items-center gap-2 pl-1">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600
-                            flex items-center justify-center overflow-hidden shadow-sm ring-2
-                            ring-primary-200/50 dark:ring-primary-900/50 shrink-0">
+            <button
+              onClick={() => navigate(getSettingsPath())}
+              title={t('nav.settings')}
+              className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600
+                          flex items-center justify-center overflow-hidden shadow-sm ring-2
+                          ring-primary-200/50 dark:ring-primary-900/50 shrink-0
+                          hover:ring-primary-400/60 dark:hover:ring-primary-600/60
+                          transition-all duration-200"
+            >
               {user?.profilePhotoUrl ? (
                 <img src={user.profilePhotoUrl} alt="avatar" className="w-full h-full object-cover" />
               ) : (
@@ -140,7 +158,7 @@ export default function Header({ onMenuClick }: Props) {
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
                 </span>
               )}
-            </div>
+            </button>
 
             <button
               onClick={logout}

@@ -6,6 +6,7 @@ import api from '../../services/api'
 import AnimatedStatCard from '../../components/common/AnimatedStatCard'
 import { StatCardSkeleton, ListItemSkeleton } from '../../components/common/Skeleton'
 import { useAuthStore } from '../../context/authStore'
+import StudentLessonDetailModal from '../../components/student/StudentLessonDetailModal'
 
 interface Enrollment {
   id: string
@@ -18,6 +19,7 @@ interface Enrollment {
 
 interface LessonResponse {
   id: string
+  courseId: string
   title: string
   courseName: string
   scheduledAt: string
@@ -29,6 +31,28 @@ interface RecentGrade {
   courseName: string
   grade: number
   gradedAt: string
+  lessonId: string
+  courseId: string
+}
+
+interface LessonForModal {
+  id: string
+  courseId: string
+  courseName: string
+  title: string
+  date: string
+  time: string
+  materials: { id: string; name: string; url: string; type: 'pdf' | 'docx' }[]
+  recordingUrl?: string
+  homework?: {
+    id: string
+    title: string
+    description: string
+    deadline: string
+    homeworkFileId?: string
+    submittedUrl?: string
+    grade?: number
+  }
 }
 
 export default function StudentDashboard() {
@@ -40,6 +64,8 @@ export default function StudentDashboard() {
   const [upcomingLessons, setUpcomingLessons] = useState<LessonResponse[]>([])
   const [recentGrades, setRecentGrades] = useState<RecentGrade[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedLesson, setSelectedLesson] = useState<LessonForModal | null>(null)
+  const [loadingModal, setLoadingModal] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -58,13 +84,20 @@ export default function StudentDashboard() {
       for (const enrollment of enrollRes.data) {
         try {
           const perfRes = await api.get<{
-            performance: { lessonTitle: string; homework?: { title: string; submission?: { grade?: number; gradedAt?: string } } }[]
+            performance: { lessonId: string; lessonTitle: string; homework?: { title: string; submission?: { grade?: number; gradedAt?: string } } }[]
             courseName: string
           }>(`/student/me/performance/${enrollment.id}`)
           for (const p of perfRes.data.performance) {
             const sub = p.homework?.submission
             if (sub?.grade != null && sub.gradedAt) {
-              grades.push({ hwTitle: p.homework!.title, courseName: perfRes.data.courseName, grade: sub.grade, gradedAt: sub.gradedAt })
+              grades.push({
+                hwTitle: p.homework!.title,
+                courseName: perfRes.data.courseName,
+                grade: sub.grade,
+                gradedAt: sub.gradedAt,
+                lessonId: p.lessonId,
+                courseId: enrollment.courseId,
+              })
             }
           }
         } catch {}
@@ -83,6 +116,78 @@ export default function StudentDashboard() {
     : null
 
   const pendingHomework = upcomingLessons.filter(l => l.hasHomework).length
+
+  const handleGradeClick = async (g: RecentGrade) => {
+    setLoadingModal(true)
+    try {
+      const lessonsRes = await api.get<{ id: string; courseId: string; courseName: string; title: string; scheduledAt: string; recordingUrl?: string; materialsCount: number }[]>('/student/lessons')
+      const lesson = lessonsRes.data.find(l => l.id === g.lessonId)
+      if (!lesson) return
+
+      const dt = new Date(lesson.scheduledAt)
+      const date = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+      const time = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+
+      let materials: LessonForModal['materials'] = []
+      if (lesson.materialsCount > 0) {
+        try {
+          const matRes = await api.get<{ id: string; name: string; fileType: string }[]>(`/instructor/lessons/${lesson.id}/materials`)
+          materials = matRes.data.map(m => ({ id: m.id, name: m.name, url: '', type: (m.fileType === 'pdf' ? 'pdf' : 'docx') as 'pdf' | 'docx' }))
+        } catch {}
+      }
+
+      let homework: LessonForModal['homework'] | undefined
+      try {
+        const hwRes = await api.get<{ id: string; title: string; description: string; deadline: string; taskFileUrl?: string }>(`/instructor/lessons/${lesson.id}/homework`)
+        const hw = hwRes.data
+        let submittedUrl: string | undefined
+        let grade: number | undefined
+        try {
+          const subRes = await api.get<{ githubUrl?: string; grade?: number }>(`/student/homework/${hw.id}/my-submission`)
+          submittedUrl = subRes.data.githubUrl
+          grade = subRes.data.grade
+        } catch {}
+        homework = { id: hw.id, title: hw.title, description: hw.description, deadline: hw.deadline, homeworkFileId: hw.taskFileUrl ? hw.id : undefined, submittedUrl, grade }
+      } catch {}
+
+      setSelectedLesson({ id: lesson.id, courseId: lesson.courseId, courseName: lesson.courseName, title: lesson.title, date, time, materials, recordingUrl: lesson.recordingUrl, homework })
+    } finally {
+      setLoadingModal(false)
+    }
+  }
+
+  const handleLessonClick = async (lesson: LessonResponse) => {
+    setLoadingModal(true)
+    try {
+      const dt = new Date(lesson.scheduledAt)
+      const date = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+      const time = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+
+      let materials: LessonForModal['materials'] = []
+      try {
+        const matRes = await api.get<{ id: string; name: string; fileType: string }[]>(`/instructor/lessons/${lesson.id}/materials`)
+        materials = matRes.data.map(m => ({ id: m.id, name: m.name, url: '', type: (m.fileType === 'pdf' ? 'pdf' : 'docx') as 'pdf' | 'docx' }))
+      } catch {}
+
+      let homework: LessonForModal['homework'] | undefined
+      try {
+        const hwRes = await api.get<{ id: string; title: string; description: string; deadline: string; taskFileUrl?: string }>(`/instructor/lessons/${lesson.id}/homework`)
+        const hw = hwRes.data
+        let submittedUrl: string | undefined
+        let grade: number | undefined
+        try {
+          const subRes = await api.get<{ githubUrl?: string; grade?: number }>(`/student/homework/${hw.id}/my-submission`)
+          submittedUrl = subRes.data.githubUrl
+          grade = subRes.data.grade
+        } catch {}
+        homework = { id: hw.id, title: hw.title, description: hw.description, deadline: hw.deadline, homeworkFileId: hw.taskFileUrl ? hw.id : undefined, submittedUrl, grade }
+      } catch {}
+
+      setSelectedLesson({ id: lesson.id, courseId: lesson.courseId, courseName: lesson.courseName, title: lesson.title, date, time, materials, homework })
+    } finally {
+      setLoadingModal(false)
+    }
+  }
 
   const getGradeColor = (grade: number) => {
     if (grade >= 90) return 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800'
@@ -172,7 +277,8 @@ export default function StudentDashboard() {
                 return (
                   <div
                     key={lesson.id}
-                    className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-all duration-200 group"
+                    onClick={() => handleLessonClick(lesson)}
+                    className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-all duration-200 group cursor-pointer"
                     style={{ animationDelay: `${i * 60}ms` }}
                   >
                     <div className="w-10 h-10 bg-primary-50 dark:bg-primary-900/20 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/40 transition-colors">
@@ -213,7 +319,8 @@ export default function StudentDashboard() {
               {recentGrades.map((g, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-violet-200 dark:hover:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-900/10 transition-all duration-200"
+                  onClick={() => handleGradeClick(g)}
+                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-violet-200 dark:hover:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-900/10 transition-all duration-200 cursor-pointer"
                 >
                   <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-xl flex items-center justify-center shrink-0">
                     <TrendingUp size={18} className="text-violet-600 dark:text-violet-400" />
@@ -231,6 +338,19 @@ export default function StudentDashboard() {
           )}
         </div>
       </div>
+
+      {/* Lesson detail modal */}
+      {loadingModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+      {selectedLesson && !loadingModal && (
+        <StudentLessonDetailModal
+          lesson={selectedLesson}
+          onClose={() => setSelectedLesson(null)}
+        />
+      )}
 
       {/* AI Banner */}
       <div className="relative overflow-hidden rounded-3xl

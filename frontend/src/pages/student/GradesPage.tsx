@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Award, BookOpen, CheckSquare, MessageSquare, TrendingUp } from 'lucide-react'
+import { Award, BookOpen, CheckSquare, MessageSquare, TrendingUp, Calendar, ArrowUpDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
 import AnimatedStatCard from '../../components/common/AnimatedStatCard'
 import { StatCardSkeleton, GradeSectionSkeleton } from '../../components/common/Skeleton'
 import EmptyState from '../../components/common/EmptyState'
+import StudentLessonDetailModal from '../../components/student/StudentLessonDetailModal'
+
+type PeriodPreset = 'all' | 'today' | 'week' | 'custom'
 
 interface Enrollment {
   id: string
@@ -21,6 +24,27 @@ interface HomeworkGrade {
   feedback?: string
   gradedAt: string
   submittedAt: string
+  lessonId: string
+}
+
+interface LessonForModal {
+  id: string
+  courseId: string
+  courseName: string
+  title: string
+  date: string
+  time: string
+  materials: { id: string; name: string; url: string; type: 'pdf' | 'docx' }[]
+  recordingUrl?: string
+  homework?: {
+    id: string
+    title: string
+    description: string
+    deadline: string
+    homeworkFileId?: string
+    submittedUrl?: string
+    grade?: number
+  }
 }
 
 interface CourseGrades {
@@ -62,6 +86,12 @@ export default function GradesPage() {
   const dateLocale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
   const [courses, setCourses] = useState<CourseGrades[]>([])
   const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState<PeriodPreset>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+  const [selectedLesson, setSelectedLesson] = useState<LessonForModal | null>(null)
+  const [loadingModal, setLoadingModal] = useState(false)
 
   useEffect(() => { loadGrades() }, [])
 
@@ -80,6 +110,7 @@ export default function GradesPage() {
               attendanceRate: number | null
               homeworkCompletionRate: number | null
               performance: {
+                lessonId: string
                 homework?: {
                   title: string
                   submission?: { grade?: number; feedback?: string; gradedAt?: string; submittedAt?: string }
@@ -95,6 +126,7 @@ export default function GradesPage() {
                 feedback: p.homework!.submission!.feedback,
                 gradedAt: p.homework!.submission!.gradedAt ?? '',
                 submittedAt: p.homework!.submission!.submittedAt ?? '',
+                lessonId: p.lessonId,
               }))
               .sort((a, b) => new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime())
 
@@ -117,11 +149,83 @@ export default function GradesPage() {
     }
   }
 
-  const gradedCourses = courses.filter((c) => c.averageGrade != null)
+  const filterGrades = (grades: HomeworkGrade[]): HomeworkGrade[] => {
+    if (period === 'all') return grades
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (period === 'today') {
+      return grades.filter(g => g.gradedAt && new Date(g.gradedAt) >= startOfToday)
+    }
+    if (period === 'week') {
+      const weekAgo = new Date(startOfToday)
+      weekAgo.setDate(weekAgo.getDate() - 6)
+      return grades.filter(g => g.gradedAt && new Date(g.gradedAt) >= weekAgo)
+    }
+    if (period === 'custom') {
+      const from = customFrom ? new Date(customFrom) : null
+      const to = customTo ? new Date(customTo + 'T23:59:59') : null
+      return grades.filter(g => {
+        if (!g.gradedAt) return false
+        const d = new Date(g.gradedAt)
+        if (from && d < from) return false
+        if (to && d > to) return false
+        return true
+      })
+    }
+    return grades
+  }
+
+  const handleGradeClick = async (hw: HomeworkGrade, courseId: string, courseName: string) => {
+    setLoadingModal(true)
+    try {
+      const lessonsRes = await api.get<{ id: string; courseId: string; courseName: string; title: string; scheduledAt: string; recordingUrl?: string; materialsCount: number }[]>('/student/lessons')
+      const lesson = lessonsRes.data.find(l => l.id === hw.lessonId)
+      if (!lesson) return
+
+      const dt = new Date(lesson.scheduledAt)
+      const date = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+      const time = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+
+      let materials: LessonForModal['materials'] = []
+      if (lesson.materialsCount > 0) {
+        try {
+          const matRes = await api.get<{ id: string; name: string; fileType: string }[]>(`/instructor/lessons/${lesson.id}/materials`)
+          materials = matRes.data.map(m => ({ id: m.id, name: m.name, url: '', type: (m.fileType === 'pdf' ? 'pdf' : 'docx') as 'pdf' | 'docx' }))
+        } catch {}
+      }
+
+      let homework: LessonForModal['homework'] | undefined
+      try {
+        const hwRes = await api.get<{ id: string; title: string; description: string; deadline: string; taskFileUrl?: string }>(`/instructor/lessons/${lesson.id}/homework`)
+        const h = hwRes.data
+        let submittedUrl: string | undefined
+        let grade: number | undefined
+        try {
+          const subRes = await api.get<{ githubUrl?: string; grade?: number }>(`/student/homework/${h.id}/my-submission`)
+          submittedUrl = subRes.data.githubUrl
+          grade = subRes.data.grade
+        } catch {}
+        homework = { id: h.id, title: h.title, description: h.description, deadline: h.deadline, homeworkFileId: h.taskFileUrl ? h.id : undefined, submittedUrl, grade }
+      } catch {}
+
+      setSelectedLesson({ id: lesson.id, courseId, courseName, title: lesson.title, date, time, materials, recordingUrl: lesson.recordingUrl, homework })
+    } finally {
+      setLoadingModal(false)
+    }
+  }
+
+  const filteredCourses = courses.map(c => ({
+    ...c,
+    grades: filterGrades(c.grades).sort((a, b) => {
+      const diff = new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime()
+      return sortDir === 'desc' ? diff : -diff
+    }),
+  }))
+  const gradedCourses = filteredCourses.filter((c) => c.averageGrade != null)
   const overallAvg = gradedCourses.length > 0
     ? Math.round(gradedCourses.reduce((s, c) => s + c.averageGrade!, 0) / gradedCourses.length)
     : null
-  const totalGraded = courses.reduce((s, c) => s + c.grades.length, 0)
+  const totalGraded = filteredCourses.reduce((s, c) => s + c.grades.length, 0)
 
   const stats = [
     { label: t('student.grades.avgGrade'), value: overallAvg != null ? `${overallAvg}%` : '—', icon: Award, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400' },
@@ -136,6 +240,68 @@ export default function GradesPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('student.grades.subtitle')}</p>
       </div>
 
+      {/* Period filter */}
+      <div className="card !p-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">
+          <Calendar className="w-4 h-4" />
+          <span>Период:</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'today', 'week', 'custom'] as PeriodPreset[]).map((p) => {
+            const labels: Record<PeriodPreset, string> = {
+              all: 'Все',
+              today: 'Сегодня',
+              week: 'Последние 7 дней',
+              custom: 'Выбрать период',
+            }
+            return (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  period === p
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                {labels[p]}
+              </button>
+            )
+          })}
+        </div>
+        {period === 'custom' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="date"
+              value={customFrom}
+              onChange={e => setCustomFrom(e.target.value)}
+              className="input-field !py-1.5 !px-3 !text-sm w-auto"
+            />
+            <span className="text-gray-400 text-sm">—</span>
+            <input
+              type="date"
+              value={customTo}
+              onChange={e => setCustomTo(e.target.value)}
+              className="input-field !py-1.5 !px-3 !text-sm w-auto"
+            />
+          </div>
+        )}
+
+        {/* Sort */}
+        <div className="flex items-center gap-2 ml-auto shrink-0">
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Сортировка:</span>
+          <button
+            onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
+                       bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-150"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            {sortDir === 'desc' ? 'Сначала новые' : 'Сначала старые'}
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)
@@ -147,7 +313,7 @@ export default function GradesPage() {
         <div className="space-y-4">
           {Array.from({ length: 2 }).map((_, i) => <GradeSectionSkeleton key={i} />)}
         </div>
-      ) : courses.length === 0 ? (
+      ) : filteredCourses.length === 0 ? (
         <div className="card">
           <EmptyState
             icon={Award}
@@ -157,7 +323,7 @@ export default function GradesPage() {
         </div>
       ) : (
         <div className="space-y-4 animate-[fadeSlideUp_0.4s_0.2s_ease_both] opacity-0 [animation-fill-mode:forwards]">
-          {courses.map((course) => {
+          {filteredCourses.map((course) => {
             const style = course.averageGrade != null ? gradeStyle(course.averageGrade) : null
             return (
               <div key={course.enrollmentId} className="card overflow-hidden">
@@ -235,9 +401,12 @@ export default function GradesPage() {
                       return (
                         <div
                           key={i}
+                          onClick={() => handleGradeClick(hw, course.enrollmentId, course.courseName)}
                           className="p-4 bg-gray-50/80 dark:bg-gray-800/40
                                      rounded-xl border border-gray-100 dark:border-gray-800/60
-                                     hover:border-gray-200 dark:hover:border-gray-700 transition-colors"
+                                     hover:border-violet-200 dark:hover:border-violet-700
+                                     hover:bg-violet-50/50 dark:hover:bg-violet-900/10
+                                     transition-colors cursor-pointer"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-start gap-2.5 flex-1 min-w-0">
@@ -274,6 +443,18 @@ export default function GradesPage() {
             )
           })}
         </div>
+      )}
+
+      {loadingModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+      {selectedLesson && !loadingModal && (
+        <StudentLessonDetailModal
+          lesson={selectedLesson}
+          onClose={() => setSelectedLesson(null)}
+        />
       )}
     </div>
   )

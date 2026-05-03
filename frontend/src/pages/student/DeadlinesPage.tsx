@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Clock, CheckCircle2, XCircle, AlertTriangle, BookOpen, Filter } from 'lucide-react'
+import { Clock, CheckCircle2, XCircle, AlertTriangle, BookOpen, Filter, ArrowUpDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import AnimatedStatCard from '../../components/common/AnimatedStatCard'
 import api from '../../services/api'
@@ -65,6 +65,7 @@ type FilterKey = 'all' | 'pending' | 'submitted' | 'graded' | 'overdue'
 
 export default function DeadlinesPage() {
   const [filter, setFilter] = useState<FilterKey>('all')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
   const [loading, setLoading] = useState(true)
   const { t } = useTranslation()
@@ -83,11 +84,8 @@ export default function DeadlinesPage() {
   const filtered = deadlines
     .filter((d) => filter === 'all' || d.status === filter)
     .sort((a, b) => {
-      if (a.status === 'overdue' && b.status !== 'overdue') return -1
-      if (b.status === 'overdue' && a.status !== 'overdue') return 1
-      if (a.status === 'graded' && b.status !== 'graded') return 1
-      if (b.status === 'graded' && a.status !== 'graded') return -1
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      const diff = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      return sortDir === 'asc' ? diff : -diff
     })
 
   const FILTERS: { key: FilterKey; label: string }[] = [
@@ -134,9 +132,9 @@ export default function DeadlinesPage() {
         />
       </div>
 
-      {/* Filter tabs */}
+      {/* Filter tabs + sort */}
       <div className="flex items-center gap-1 flex-wrap">
-        <Filter className="w-4 h-4 text-gray-400 mr-1" />
+        <Filter className="w-4 h-4 text-gray-400 mr-1 shrink-0" />
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -150,6 +148,17 @@ export default function DeadlinesPage() {
             {f.label}
           </button>
         ))}
+        <button
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                     bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700
+                     text-gray-600 dark:text-gray-400
+                     hover:border-gray-300 dark:hover:border-gray-600
+                     transition-all shrink-0"
+        >
+          <ArrowUpDown className="w-3.5 h-3.5" />
+          {sortDir === 'asc' ? 'Сначала ранние' : 'Сначала поздние'}
+        </button>
       </div>
 
       {/* Deadline list */}

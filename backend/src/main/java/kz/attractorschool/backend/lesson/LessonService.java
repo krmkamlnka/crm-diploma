@@ -49,8 +49,8 @@ public class LessonService {
 
         validateInstructorAccess(course, instructorId);
 
-        // КРИТИЧЕСКАЯ ПРОВЕРКА КОНФЛИКТОВ
-        checkScheduleConflicts(courseId, request.getScheduledAt(), request.getDurationMinutes(), null);
+        // КРИТИЧЕСКАЯ ПРОВЕРКА КОНФЛИКТОВ (по всем курсам преподавателя)
+        checkScheduleConflicts(instructorId, request.getScheduledAt(), request.getDurationMinutes(), null);
 
         Lesson lesson = Lesson.builder()
                 .course(course)
@@ -153,7 +153,7 @@ public class LessonService {
                     ? request.getDurationMinutes()
                     : lesson.getDurationMinutes();
 
-            checkScheduleConflicts(lesson.getCourse().getId(), newScheduledAt, newDuration, lessonId);
+            checkScheduleConflicts(instructorId, newScheduledAt, newDuration, lessonId);
 
             lesson.setScheduledAt(newScheduledAt);
             lesson.setDurationMinutes(newDuration);
@@ -202,7 +202,7 @@ public class LessonService {
         log.info("Lesson {} deleted successfully", lessonId);
     }
 
-    private void checkScheduleConflicts(UUID courseId, LocalDateTime scheduledAt, Integer durationMinutes, UUID excludeLessonId) {
+    private void checkScheduleConflicts(UUID instructorId, LocalDateTime scheduledAt, Integer durationMinutes, UUID excludeLessonId) {
         if (scheduledAt == null) {
             throw new BadRequestException("Scheduled time is required");
         }
@@ -213,11 +213,11 @@ public class LessonService {
 
         LocalDateTime newEnd = scheduledAt.plusMinutes(durationMinutes);
 
-        log.debug("Checking conflicts for lesson scheduled at {} (duration: {} min, ends at {})",
-                scheduledAt, durationMinutes, newEnd);
+        log.debug("Checking conflicts for instructor {} lesson scheduled at {} (duration: {} min, ends at {})",
+                instructorId, scheduledAt, durationMinutes, newEnd);
 
-        List<Lesson> conflicts = lessonRepository.findConflictingLessons(
-                courseId, scheduledAt, newEnd, excludeLessonId
+        List<Lesson> conflicts = lessonRepository.findConflictingLessonsByInstructor(
+                instructorId, scheduledAt, newEnd, excludeLessonId
         );
 
         if (!conflicts.isEmpty()) {
@@ -231,8 +231,10 @@ public class LessonService {
 
             log.warn("Schedule conflict detected with lesson: {}", conflictInfo);
             throw new ConflictException(
-                    String.format("Lesson conflicts with another lesson: %s at %s",
-                            conflictInfo.getTitle(), conflictInfo.getScheduledAt())
+                    String.format("Lesson '%s' (course: %s) is already scheduled at %s",
+                            conflictingLesson.getTitle(),
+                            conflictingLesson.getCourse().getName(),
+                            conflictingLesson.getScheduledAt())
             );
         }
     }

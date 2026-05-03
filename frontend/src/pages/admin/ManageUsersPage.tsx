@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, BookOpen, Ban, Edit, RefreshCw, MoreVertical, Users } from 'lucide-react'
 import EnrollStudentModal from '../../components/admin/EnrollStudentModal'
+import UserProfileModal from '../../components/admin/UserProfileModal'
 import api from '../../services/api'
 import { UserRole } from '../../types'
 import { TableRowSkeleton } from '../../components/common/Skeleton'
@@ -63,6 +64,7 @@ export default function ManageUsersPage() {
   const [totalPages, setTotalPages] = useState(0)
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [profileUser, setProfileUser] = useState<User | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '', phone: '', role: '' as UserRole })
@@ -207,11 +209,14 @@ export default function ManageUsersPage() {
                     <tr
                       key={user.id}
                       className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                      onClick={() => setOpenMenuId(null)}
+                      onClick={() => { setOpenMenuId(null); setProfileUser(user) }}
                     >
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setProfileUser(user) }}
+                            className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center overflow-hidden shrink-0 hover:ring-2 hover:ring-primary-400 hover:ring-offset-2 transition-all cursor-pointer"
+                          >
                             {user.profilePhotoUrl ? (
                               <img src={user.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
@@ -219,7 +224,7 @@ export default function ManageUsersPage() {
                                 {user.firstName?.[0]}{user.lastName?.[0]}
                               </span>
                             )}
-                          </div>
+                          </button>
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                               {user.firstName} {user.lastName}
@@ -331,6 +336,16 @@ export default function ManageUsersPage() {
           )}
         </div>
       </div>
+
+      {profileUser && (
+        <UserProfileModal
+          user={profileUser}
+          onClose={() => setProfileUser(null)}
+          onEdit={(u) => { setProfileUser(null); openEdit(u) }}
+          onToggleStatus={(u) => { setProfileUser(null); handleToggleStatus(u) }}
+          onEnroll={(u) => { setProfileUser(null); setSelectedStudent(u) }}
+        />
+      )}
 
       {selectedStudent && (
         <EnrollStudentModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
 import { useTranslation } from 'react-i18next'
 import {
@@ -17,7 +17,18 @@ interface Props {
 export default function Sidebar({ open, onClose }: Props) {
   const { user } = useAuthStore()
   const location = useLocation()
+  const navigate = useNavigate()
   const { t } = useTranslation()
+
+  const getSettingsPath = () => {
+    switch (user?.role) {
+      case 'SUPER_ADMIN':
+      case 'ADMIN':      return '/admin/settings'
+      case 'INSTRUCTOR': return '/instructor/settings'
+      case 'STUDENT':    return '/student/settings'
+      default:           return '/'
+    }
+  }
 
   const getRoleLabel = (role: UserRole) => t(`roles.${role}`)
 
@@ -157,9 +168,12 @@ export default function Sidebar({ open, onClose }: Props) {
 
       {/* User profile */}
       <div className="p-3 border-t border-gray-100/80 dark:border-gray-800/60">
-        <div className="flex items-center gap-3 p-2.5 rounded-xl
+        <div
+          onClick={() => { navigate(getSettingsPath()); onClose() }}
+          className="flex items-center gap-3 p-2.5 rounded-xl
                         hover:bg-gray-50/80 dark:hover:bg-white/[0.04]
-                        transition-all duration-200 cursor-pointer group">
+                        transition-all duration-200 cursor-pointer group"
+        >
           <div className={`relative w-9 h-9 rounded-xl bg-gradient-to-br ${accent}
                           flex items-center justify-center overflow-hidden shrink-0
                           shadow-md ring-2 ring-white/50 dark:ring-gray-900/50`}>

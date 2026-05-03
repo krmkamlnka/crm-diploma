@@ -81,11 +81,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
-        log.error("Bad credentials: {}", ex.getMessage());
+        log.warn("Bad credentials: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
                 .statusCode(HttpStatus.UNAUTHORIZED.value())
                 .error("Unauthorized")
-                .message("Invalid email or password")
+                .message(ex.getMessage())
                 .timestamp(LocalDateTime.now())
                 .build();
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);

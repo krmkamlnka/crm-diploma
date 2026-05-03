@@ -90,10 +90,9 @@ api.interceptors.response.use(
 
       const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
       if (!refreshToken) {
-        // No refresh token - redirect to login
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(REFRESH_TOKEN_KEY)
-        window.location.href = '/login'
+        window.dispatchEvent(new CustomEvent('session:expired'))
         return Promise.reject(error)
       }
 
@@ -116,7 +115,7 @@ api.interceptors.response.use(
         processQueue(refreshError as Error, null)
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(REFRESH_TOKEN_KEY)
-        window.location.href = '/login'
+        window.dispatchEvent(new CustomEvent('session:expired'))
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

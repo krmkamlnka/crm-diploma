@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Users, UserPlus, GraduationCap, TrendingUp, Shield } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
@@ -6,14 +6,25 @@ import AnimatedStatCard from '../../components/common/AnimatedStatCard'
 import AnimatedProgressBar from '../../components/common/AnimatedProgressBar'
 import { StatCardSkeleton, ListItemSkeleton } from '../../components/common/Skeleton'
 import { useAuthStore } from '../../context/authStore'
+import UserProfileModal from '../../components/admin/UserProfileModal'
+import { UserRole } from '../../types'
 
 interface RecentUser {
   id: string
   firstName: string
   lastName: string
   email: string
-  role: string
+  role: UserRole
+  phone?: string
   profilePhotoUrl?: string
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING'
+  createdAt: string
+}
+
+interface CourseItem {
+  id: string
+  name: string
+  enrolledStudents: number
 }
 
 interface DashboardData {
@@ -25,6 +36,7 @@ interface DashboardData {
   courseFillPercent: number
   paidInvoicesPercent: number
   recentRegistrations: RecentUser[]
+  courseList: CourseItem[]
 }
 
 const getRoleBadgeClass = (role: string) => {
@@ -39,6 +51,9 @@ export default function AdminDashboard() {
   const { user } = useAuthStore()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileUser, setProfileUser] = useState<RecentUser | null>(null)
+  const [courseTooltip, setCourseTooltip] = useState(false)
+  const courseCardRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -65,6 +80,7 @@ export default function AdminDashboard() {
   const greeting = hour < 12 ? t('common.goodMorning') : hour < 18 ? t('common.goodAfternoon') : t('common.goodEvening')
 
   return (
+    <>
     <div className="space-y-6">
       {/* Hero header */}
       <div className="relative overflow-hidden rounded-3xl
@@ -104,7 +120,34 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-          : stats.map((stat, i) => <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />)
+          : stats.map((stat, i) => i === 2 ? (
+            <div
+              key={stat.label}
+              ref={courseCardRef}
+              className="relative"
+              onMouseEnter={() => setCourseTooltip(true)}
+              onMouseLeave={() => setCourseTooltip(false)}
+            >
+              <AnimatedStatCard {...stat} delay={i * 80} />
+              {courseTooltip && data?.courseList && data.courseList.length > 0 && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-3 animate-[fadeSlideUp_0.15s_ease_both]">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 px-1">
+                    {t('admin.dashboard.totalCourses')}
+                  </p>
+                  <div className="space-y-1">
+                    {data.courseList.map(c => (
+                      <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <span className="text-sm text-gray-800 dark:text-gray-200 truncate flex-1">{c.name}</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 ml-2">{c.enrolledStudents} чел.</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />
+          ))
         }
       </div>
 
@@ -119,7 +162,8 @@ export default function AdminDashboard() {
               {data?.recentRegistrations.map((user, i) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 transition-all duration-200"
+                  onClick={() => setProfileUser(user)}
+                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all duration-200 cursor-pointer"
                   style={{ animationDelay: `${i * 50}ms` }}
                 >
                   <div className="flex items-center gap-3">
@@ -173,5 +217,26 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
+
+    {profileUser && (
+      <UserProfileModal
+        user={profileUser}
+        onClose={() => setProfileUser(null)}
+        onEdit={() => setProfileUser(null)}
+        onToggleStatus={async (u) => {
+          const newStatus = u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+          try {
+            await api.patch(`/admin/users/${u.id}/status`, { status: newStatus })
+            setData(prev => prev ? {
+              ...prev,
+              recentRegistrations: prev.recentRegistrations.map(r => r.id === u.id ? { ...r, status: newStatus } : r)
+            } : prev)
+            setProfileUser(prev => prev?.id === u.id ? { ...prev, status: newStatus } : prev)
+          } catch { /* ignore */ }
+        }}
+        onEnroll={() => setProfileUser(null)}
+      />
+    )}
+    </>
   )
 }

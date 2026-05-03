@@ -38,6 +38,22 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
             @Param("excludeLessonId") UUID excludeLessonId
     );
 
+    /**
+     * Проверка пересечения уроков по преподавателю (все его курсы).
+     * Используется при создании/редактировании урока для предотвращения конфликтов расписания.
+     */
+    @Query("SELECT l FROM Lesson l JOIN FETCH l.course WHERE l.course.instructor.id = :instructorId " +
+            "AND (:excludeLessonId IS NULL OR l.id <> :excludeLessonId) " +
+            "AND l.status <> 'CANCELLED' " +
+            "AND :newStart < FUNCTION('TIMESTAMPADD', MINUTE, l.durationMinutes, l.scheduledAt) " +
+            "AND :newEnd > l.scheduledAt")
+    List<Lesson> findConflictingLessonsByInstructor(
+            @Param("instructorId") UUID instructorId,
+            @Param("newStart") LocalDateTime newStart,
+            @Param("newEnd") LocalDateTime newEnd,
+            @Param("excludeLessonId") UUID excludeLessonId
+    );
+
     @Query("SELECT l FROM Lesson l " +
             "WHERE l.course.instructor.id = :instructorId " +
             "ORDER BY l.scheduledAt DESC")

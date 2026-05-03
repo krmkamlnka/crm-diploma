@@ -18,6 +18,7 @@ import kz.attractorschool.backend.user.UserStatus;
 import kz.attractorschool.backend.user.dto.UserDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -132,16 +133,16 @@ public class AuthService {
 
         // Поиск пользователя
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Неверный email или пароль"));
+                .orElseThrow(() -> new BadCredentialsException("Неверный email или пароль"));
 
         // Проверка пароля
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Неверный email или пароль");
+            throw new BadCredentialsException("Неверный email или пароль");
         }
 
         // Проверка статуса пользователя
         if (user.getStatus() == UserStatus.INACTIVE) {
-            throw new RuntimeException("Аккаунт деактивирован");
+            throw new BadCredentialsException("Аккаунт деактивирован");
         }
 
         log.info("Пользователь успешно вошел: {}", user.getEmail());
