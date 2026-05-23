@@ -271,7 +271,8 @@
       "confirmActivate": "Activate user?",
       "createdAt": "Registration date",
       "saving": "Saving...",
-      "roleSuperAdmin": "Super Administrator"
+      "roleSuperAdmin": "Super Administrator",
+      "viewOnly": "View only"
     },
     "payments": {
       "title": "Payment Management",

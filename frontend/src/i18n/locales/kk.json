@@ -271,7 +271,8 @@
       "confirmActivate": "Пайдаланушыны белсендіру?",
       "createdAt": "Тіркелу күні",
       "saving": "Сақталуда...",
-      "roleSuperAdmin": "Супер-әкімші"
+      "roleSuperAdmin": "Супер-әкімші",
+      "viewOnly": "Тек қарау"
     },
     "payments": {
       "title": "Төлемді басқару",

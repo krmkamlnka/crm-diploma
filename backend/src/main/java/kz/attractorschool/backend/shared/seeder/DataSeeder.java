@@ -1,11 +1,11 @@
 package kz.attractorschool.backend.shared.seeder;
 
+import kz.attractorschool.backend.shared.encryption.EmailHashUtil;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
 import kz.attractorschool.backend.user.UserStatus;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -24,18 +24,29 @@ public class DataSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailHashUtil emailHashUtil;
 
     @Override
     public void run(String... args) {
         log.info("Running DataSeeder...");
+        fixEmailHashes();
         seedSuperAdmin();
     }
 
-    /**
-     * Создать SUPER_ADMIN пользователя если его нет
-     */
+    // Пересчитывает email_hash для всех пользователей у которых он был заполнен
+    // через PostgreSQL sha256() (не HMAC) — это происходит после миграции V21
+    private void fixEmailHashes() {
+        userRepository.findAll().forEach(user -> {
+            String correctHash = emailHashUtil.hash(user.getEmail());
+            if (!correctHash.equals(user.getEmailHash())) {
+                user.setEmailHash(correctHash);
+                userRepository.save(user);
+                log.info("Fixed email_hash for user: {}", user.getEmail());
+            }
+        });
+    }
+
     private void seedSuperAdmin() {
-        // Проверка: существует ли уже SUPER_ADMIN
         boolean superAdminExists = userRepository.findAll().stream()
                 .anyMatch(user -> user.getRole() == UserRole.SUPER_ADMIN);
 
@@ -44,15 +55,16 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        // Создание SUPER_ADMIN
+        String email = "admin@crmlms.kz";
         User superAdmin = User.builder()
-                .email("admin@crmlms.kz")
+                .email(email)
+                .emailHash(emailHashUtil.hash(email))
                 .passwordHash(passwordEncoder.encode("Admin123!"))
                 .firstName("Супер")
                 .lastName("Админ")
                 .role(UserRole.SUPER_ADMIN)
                 .status(UserStatus.ACTIVE)
-                .isEmailVerified(true) // SUPER_ADMIN автоматически верифицирован
+                .isEmailVerified(true)
                 .build();
 
         userRepository.save(superAdmin);

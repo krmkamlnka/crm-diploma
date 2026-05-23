@@ -83,7 +83,7 @@ jwt:
 # Конфигурация приложения
 app:
   name: "CRM LMS"
-  frontend-url: ${FRONTEND_URL:https://crm-platform.ngrok.app}
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
   email:
     from: ${SMTP_USERNAME:crm.noreply.team@mail.ru}
     from-name: "CRM LMS System"

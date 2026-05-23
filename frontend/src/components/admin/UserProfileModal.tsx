@@ -1,5 +1,6 @@
 import { X, Edit, Ban, BookOpen, Mail, Phone, Calendar, ShieldCheck } from 'lucide-react'
 import { UserRole } from '../../types'
+import { useAuthStore } from '../../context/authStore'
 
 interface User {
   id: string
@@ -43,6 +44,9 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function UserProfileModal({ user, onClose, onEdit, onToggleStatus, onEnroll }: Props) {
+  const { user: currentUser } = useAuthStore()
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -106,15 +110,17 @@ export default function UserProfileModal({ user, onClose, onEdit, onToggleStatus
             </div>
 
             <div className="flex flex-wrap gap-2 mt-auto pt-2">
-              <button
-                onClick={() => { onEdit(user); onClose() }}
-                className="btn-secondary flex items-center gap-2 text-sm"
-              >
-                <Edit className="w-4 h-4" />
-                Редактировать
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => { onEdit(user); onClose() }}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                >
+                  <Edit className="w-4 h-4" />
+                  Редактировать
+                </button>
+              )}
 
-              {user.role === 'STUDENT' && onEnroll && (
+              {isSuperAdmin && user.role === 'STUDENT' && onEnroll && (
                 <button
                   onClick={() => { onEnroll(user); onClose() }}
                   className="btn-secondary flex items-center gap-2 text-sm"
@@ -124,17 +130,19 @@ export default function UserProfileModal({ user, onClose, onEdit, onToggleStatus
                 </button>
               )}
 
-              <button
-                onClick={() => { onToggleStatus(user); onClose() }}
-                className={`flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-colors border ${
-                  user.status === 'ACTIVE'
-                    ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'
-                    : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                }`}
-              >
-                <Ban className="w-4 h-4" />
-                {user.status === 'ACTIVE' ? 'Деактивировать' : 'Активировать'}
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => { onToggleStatus(user); onClose() }}
+                  className={`flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-colors border ${
+                    user.status === 'ACTIVE'
+                      ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'
+                      : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                  }`}
+                >
+                  <Ban className="w-4 h-4" />
+                  {user.status === 'ACTIVE' ? 'Деактивировать' : 'Активировать'}
+                </button>
+              )}
             </div>
           </div>
         </div>

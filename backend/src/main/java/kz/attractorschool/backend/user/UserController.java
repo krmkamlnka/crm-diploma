@@ -81,6 +81,7 @@ public class UserController {
      * PATCH /api/v1/admin/users/{id}
      */
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateUserRequest request
@@ -93,10 +94,11 @@ public class UserController {
 
     /**
      * Изменить статус пользователя
-     * Доступ: ADMIN, SUPER_ADMIN
+     * Доступ: SUPER_ADMIN
      * PATCH /api/v1/admin/users/{id}/status
      */
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<UserResponse> changeUserStatus(
             @PathVariable UUID id,
             @RequestBody Map<String, String> request

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, User, BookOpen, Plus, Trash2, MessageSquare, X } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import MarkdownMessage from '../../components/common/MarkdownMessage'
 import api from '../../services/api'
+import { useTypingPhrase } from '../../hooks/useTypingPhrase'
 
 interface Message {
   id: string
@@ -35,6 +36,8 @@ export default function InstructorAIAssistantPage() {
   const [sidebarOpen, setSidebarOpen]       = useState(true)
   const [hoveredMsgId, setHoveredMsgId]     = useState<string | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+
+  const { phrase: loadingPhrase, visible: phraseVisible } = useTypingPhrase(isLoading)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -302,10 +305,8 @@ export default function InstructorAIAssistantPage() {
                   }`}>
                     {message.sender === 'ai' ? (
                       <div className="text-sm prose prose-sm dark:prose-invert max-w-none
-                        prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:my-2
-                        prose-code:bg-gray-200 dark:prose-code:bg-gray-600/80
-                        prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs">
-                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                        prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:my-2">
+                        <MarkdownMessage>{message.text}</MarkdownMessage>
                       </div>
                     ) : (
                       <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
@@ -332,16 +333,22 @@ export default function InstructorAIAssistantPage() {
             ))}
 
             {isLoading && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 animate-[fadeSlideUp_0.2s_ease_both]">
                 <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
                   <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700/60
-                                rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
+                                rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2.5">
                   {[0, 150, 300].map(delay => (
-                    <span key={delay} className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+                    <span key={delay} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce"
                       style={{ animationDelay: `${delay}ms` }} />
                   ))}
+                  <span
+                    className="text-sm text-gray-500 dark:text-gray-400 transition-opacity duration-300"
+                    style={{ opacity: phraseVisible ? 1 : 0 }}
+                  >
+                    {loadingPhrase}
+                  </span>
                 </div>
               </div>
             )}

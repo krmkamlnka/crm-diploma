@@ -3,6 +3,7 @@ import { Search, BookOpen, Ban, Edit, RefreshCw, MoreVertical, Users } from 'luc
 import { useTranslation } from 'react-i18next'
 import EnrollStudentModal from '../../components/admin/EnrollStudentModal'
 import UserProfileModal from '../../components/admin/UserProfileModal'
+import { useAuthStore } from '../../context/authStore'
 import api from '../../services/api'
 import { UserRole } from '../../types'
 import { TableRowSkeleton } from '../../components/common/Skeleton'
@@ -48,6 +49,8 @@ const STATUS_COLORS: Record<string, string> = {
 export default function ManageUsersPage() {
   const { t } = useTranslation()
   const { toasts, show: showToast, dismiss } = useToast()
+  const { user: currentUser } = useAuthStore()
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN'
   const [searchQuery, setSearchQuery] = useState('')
   const [filterRole, setFilterRole] = useState<string>('all')
   const [users, setUsers] = useState<User[]>([])
@@ -266,7 +269,7 @@ export default function ManageUsersPage() {
                               className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 z-10 py-1 animate-[fadeSlideUp_0.15s_ease_both]"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {user.role === 'STUDENT' && (
+                              {isSuperAdmin && user.role === 'STUDENT' && (
                                 <button
                                   onClick={() => { setSelectedStudent(user); setOpenMenuId(null) }}
                                   className="w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
@@ -274,23 +277,32 @@ export default function ManageUsersPage() {
                                   <BookOpen className="w-4 h-4" /> {t('admin.users.enrollStudent')}
                                 </button>
                               )}
-                              <button
-                                onClick={() => openEdit(user)}
-                                className="w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
-                              >
-                                <Edit className="w-4 h-4" /> {t('common.edit')}
-                              </button>
-                              <button
-                                onClick={() => handleToggleStatus(user)}
-                                className={`w-full text-left px-3.5 py-2 text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                                  user.status === 'ACTIVE'
-                                    ? 'text-red-600 dark:text-red-400'
-                                    : 'text-emerald-600 dark:text-emerald-400'
-                                }`}
-                              >
-                                <Ban className="w-4 h-4" />
-                                {user.status === 'ACTIVE' ? t('admin.users.deactivate') : t('admin.users.activate')}
-                              </button>
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => openEdit(user)}
+                                  className="w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                >
+                                  <Edit className="w-4 h-4" /> {t('common.edit')}
+                                </button>
+                              )}
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => handleToggleStatus(user)}
+                                  className={`w-full text-left px-3.5 py-2 text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                                    user.status === 'ACTIVE'
+                                      ? 'text-red-600 dark:text-red-400'
+                                      : 'text-emerald-600 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  <Ban className="w-4 h-4" />
+                                  {user.status === 'ACTIVE' ? t('admin.users.deactivate') : t('admin.users.activate')}
+                                </button>
+                              )}
+                              {!isSuperAdmin && (
+                                <p className="px-3.5 py-2 text-xs text-gray-400 dark:text-gray-500">
+                                  {t('admin.users.viewOnly')}
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>

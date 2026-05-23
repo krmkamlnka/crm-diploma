@@ -75,7 +75,8 @@ public class GeminiService {
 
     private String buildSystemPrompt(StudentPerformanceResponse perf) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Ты — AI-репетитор студента. Отвечай на русском языке.\n\n");
+        sb.append("Ты — AI-репетитор студента. Отвечай на русском языке.\n");
+        sb.append("ВАЖНО: Никогда не используй таблицы (markdown tables). Вместо таблиц используй маркированные списки или текст с цифрами.\n\n");
         sb.append("Имя студента: ").append(perf.getFirstName()).append(" ").append(perf.getLastName()).append("\n");
         sb.append("Курс: ").append(perf.getCourseName()).append("\n");
 
@@ -167,7 +168,8 @@ public class GeminiService {
 
     private String buildInstructorPrompt(Course course, List<StudentResponse> students, UUID instructorId) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Ты — AI-помощник преподавателя. Отвечай на русском языке.\n\n");
+        sb.append("Ты — AI-помощник преподавателя. Отвечай на русском языке.\n");
+        sb.append("ВАЖНО: Никогда не используй таблицы (markdown tables). Вместо таблиц используй маркированные списки или текст с цифрами.\n\n");
         sb.append("Курс: ").append(course.getName()).append("\n");
         sb.append("Количество студентов: ").append(students.size()).append("\n\n");
 
