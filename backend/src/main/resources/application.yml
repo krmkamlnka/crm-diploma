@@ -83,7 +83,7 @@ jwt:
 # Конфигурация приложения
 app:
   name: "CRM LMS"
-  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  frontend-url: ${FRONTEND_URL:https://crm-platform.ngrok.app}
   email:
     from: ${SMTP_USERNAME:crm.noreply.team@mail.ru}
     from-name: "CRM LMS System"
@@ -95,6 +95,7 @@ minio:
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket-name: ${MINIO_BUCKET_NAME:crm-lms-files}
   profile-photos-folder: "profile-photos"
+  chat-files-folder: "chat-files"
   max-file-size: 52428800  # 50MB в байтах
 
 # Логирование
@@ -117,8 +118,13 @@ openrouter:
 # Telegram Bot
 telegram:
   bot:
-    token: ${TELEGRAM_BOT_TOKEN:8759375107:AAEO9OrsrTEpRJFwRODY2APkwuYLLXIVZ68}
+    token: ${TELEGRAM_BOT_TOKEN:8645007813:AAGG5ZLgkQn8mpFTO1f2vCkgLsOvhgEGytA}
     username: ${TELEGRAM_BOT_USERNAME:crm_lms_bot}
+
+# Шифрование персональных данных (AES-256-GCM)
+# ВАЖНО: В продакшне задавать через переменную окружения ENCRYPTION_SECRET_KEY
+encryption:
+  secret-key: ${ENCRYPTION_SECRET_KEY:6nS65iNsGiRRxmqrlv+YRe1iSJa9arF8Jr52qT+Hmxk=}
 
 # Server
 server:

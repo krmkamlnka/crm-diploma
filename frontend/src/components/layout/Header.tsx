@@ -1,11 +1,61 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
 import { useThemeStore } from '../../context/themeStore'
 import { useTranslation } from 'react-i18next'
-import { Bell, LogOut, Menu, Moon, Sun } from 'lucide-react'
+import { Bell, LogOut, Menu, Moon, Sun, MessageSquare, X } from 'lucide-react'
 import NotificationPanel, { type Notification } from '../common/NotificationPanel'
 import api from '../../services/api'
+
+interface ChatToastData {
+  id: string
+  conversationId: string
+  senderName: string
+  senderAvatar: string | null
+  content: string | null
+  fileName: string | null
+}
+
+function ChatToast({ data, onClose, onClick }: { data: ChatToastData; onClose: () => void; onClick: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 5000)
+    return () => clearTimeout(t)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-[9999] flex items-start gap-3
+                 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700
+                 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.15)]
+                 px-4 py-3.5 max-w-sm min-w-[280px]
+                 animate-[fadeSlideUp_0.25s_ease_both] cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300
+                      font-bold flex items-center justify-center shrink-0 text-sm overflow-hidden">
+        {data.senderAvatar
+          ? <img src={data.senderAvatar} alt={data.senderName} className="w-full h-full object-cover" />
+          : data.senderName.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
+        }
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <MessageSquare className="w-3 h-3 text-primary-500 shrink-0" />
+          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 truncate">{data.senderName}</p>
+        </div>
+        <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
+          {data.content ?? (data.fileName ? `📎 ${data.fileName}` : 'Файл')}
+        </p>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose() }}
+        className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 transition-colors shrink-0"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
 
 interface Props {
   onMenuClick: () => void
@@ -16,6 +66,46 @@ export default function Header({ onMenuClick }: Props) {
   const { theme, toggleTheme } = useThemeStore()
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [chatToast, setChatToast] = useState<ChatToastData | null>(null)
+
+  // Request browser notification permission once
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Listen for incoming chat messages
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail
+      // Don't show toast if user is already on the chat page with this conversation
+      const isOnChat = location.pathname === '/chat'
+      if (isOnChat) return
+
+      const toast: ChatToastData = {
+        id: msg.id,
+        conversationId: msg.conversationId,
+        senderName: msg.senderName,
+        senderAvatar: msg.senderAvatar ?? null,
+        content: msg.content ?? null,
+        fileName: msg.fileName ?? null,
+      }
+      setChatToast(toast)
+
+      // Browser notification
+      if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+        new Notification(msg.senderName, {
+          body: msg.content ?? (msg.fileName ? `📎 ${msg.fileName}` : 'Прислал файл'),
+          icon: msg.senderAvatar ?? '/favicon.ico',
+          tag: msg.conversationId,
+        })
+      }
+    }
+    window.addEventListener('chat:message', handler)
+    return () => window.removeEventListener('chat:message', handler)
+  }, [location.pathname])
 
   const getSettingsPath = () => {
     switch (user?.role) {
@@ -53,6 +143,17 @@ export default function Header({ onMenuClick }: Props) {
   }
 
   return (
+    <>
+    {chatToast && (
+      <ChatToast
+        data={chatToast}
+        onClose={() => setChatToast(null)}
+        onClick={() => {
+          setChatToast(null)
+          navigate('/chat')
+        }}
+      />
+    )}
     <header className="relative z-10
                         bg-white/70 dark:bg-gray-900/60
                         backdrop-blur-xl
@@ -161,7 +262,7 @@ export default function Header({ onMenuClick }: Props) {
             </button>
 
             <button
-              onClick={logout}
+              onClick={async () => { await logout(); navigate('/login', { replace: true }) }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 dark:text-gray-400
                          hover:text-red-500 dark:hover:text-red-400
                          hover:bg-red-50 dark:hover:bg-red-500/10
@@ -174,5 +275,6 @@ export default function Header({ onMenuClick }: Props) {
         </div>
       </div>
     </header>
+    </>
   )
 }

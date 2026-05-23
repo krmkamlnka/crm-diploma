@@ -126,8 +126,10 @@ public class CourseAnalyticsService {
                     ? Math.round((present * 100.0 / totalStudents) * 10.0) / 10.0
                     : 0.0;
             attendanceTrend.add(CourseAnalyticsResponse.AttendanceTrendItem.builder()
+                    .lessonId(lesson.getId())
                     .lesson("Урок " + (i + 1))
                     .rate(rate)
+                    .scheduledAt(lesson.getScheduledAt())
                     .build());
         }
 

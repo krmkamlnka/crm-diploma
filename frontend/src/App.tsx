@@ -10,6 +10,8 @@ import AuthLayout from './components/layout/AuthLayout'
 // Auth pages
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -28,6 +30,9 @@ import InstructorCalendarPage from './pages/instructor/InstructorCalendarPage'
 import InstructorSettingsPage from './pages/instructor/InstructorSettingsPage'
 import InstructorAIAssistantPage from './pages/instructor/InstructorAIAssistantPage'
 import InstructorAnalyticsPage from './pages/instructor/InstructorAnalyticsPage'
+
+// Chat page
+import ChatPage from './pages/chat/ChatPage'
 
 // Student pages
 import StudentDashboard from './pages/student/StudentDashboard'
@@ -118,6 +123,8 @@ function App() {
         {/* Public routes - always light theme */}
         <Route path="/login" element={<AuthLayout><LoginPage /></AuthLayout>} />
         <Route path="/register" element={<AuthLayout><RegisterPage /></AuthLayout>} />
+        <Route path="/forgot-password" element={<AuthLayout><ForgotPasswordPage /></AuthLayout>} />
+        <Route path="/reset-password" element={<AuthLayout><ResetPasswordPage /></AuthLayout>} />
 
         {/* Protected routes with layout */}
         <Route element={<MainLayout />}>
@@ -222,6 +229,14 @@ function App() {
             }
           />
           <Route
+            path="/instructor/students/by-user/:userId"
+            element={
+              <ProtectedRoute allowedRoles={['INSTRUCTOR']}>
+                <StudentDetailPage byUserId />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/instructor/calendar"
             element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR']}>
@@ -311,6 +326,9 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Chat — accessible to all authenticated users */}
+          <Route path="/chat" element={<ChatPage />} />
         </Route>
       </Routes>
     </Router>

@@ -86,6 +86,7 @@ export default function GradesPage() {
   const dateLocale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
   const [courses, setCourses] = useState<CourseGrades[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const [period, setPeriod] = useState<PeriodPreset>('all')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -142,6 +143,7 @@ export default function GradesPage() {
         })
       )
       setCourses(courseGrades)
+      if (courseGrades.length > 0) setSelectedCourseId(prev => prev ?? courseGrades[0].enrollmentId)
     } catch (err) {
       console.error('Failed to load grades:', err)
     } finally {
@@ -214,6 +216,8 @@ export default function GradesPage() {
     }
   }
 
+  const activeCourse = courses.find(c => c.enrollmentId === selectedCourseId) ?? courses[0] ?? null
+
   const filteredCourses = courses.map(c => ({
     ...c,
     grades: filterGrades(c.grades).sort((a, b) => {
@@ -221,11 +225,10 @@ export default function GradesPage() {
       return sortDir === 'desc' ? diff : -diff
     }),
   }))
-  const gradedCourses = filteredCourses.filter((c) => c.averageGrade != null)
-  const overallAvg = gradedCourses.length > 0
-    ? Math.round(gradedCourses.reduce((s, c) => s + c.averageGrade!, 0) / gradedCourses.length)
-    : null
-  const totalGraded = filteredCourses.reduce((s, c) => s + c.grades.length, 0)
+  const activeFiltered = filteredCourses.find(c => c.enrollmentId === selectedCourseId) ?? filteredCourses[0] ?? null
+
+  const overallAvg = activeCourse?.averageGrade != null ? Math.round(activeCourse.averageGrade) : null
+  const totalGraded = activeFiltered?.grades.length ?? 0
 
   const stats = [
     { label: t('student.grades.avgGrade'), value: overallAvg != null ? `${overallAvg}%` : '—', icon: Award, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400' },
@@ -244,15 +247,15 @@ export default function GradesPage() {
       <div className="card !p-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">
           <Calendar className="w-4 h-4" />
-          <span>Период:</span>
+          <span>{t('student.grades.period')}</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {(['all', 'today', 'week', 'custom'] as PeriodPreset[]).map((p) => {
             const labels: Record<PeriodPreset, string> = {
-              all: 'Все',
-              today: 'Сегодня',
-              week: 'Последние 7 дней',
-              custom: 'Выбрать период',
+              all: t('student.grades.periodAll'),
+              today: t('student.grades.periodToday'),
+              week: t('student.grades.periodWeek'),
+              custom: t('student.grades.periodCustom'),
             }
             return (
               <button
@@ -289,7 +292,7 @@ export default function GradesPage() {
 
         {/* Sort */}
         <div className="flex items-center gap-2 ml-auto shrink-0">
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Сортировка:</span>
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('student.grades.sort')}</span>
           <button
             onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
@@ -297,7 +300,7 @@ export default function GradesPage() {
                        hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-150"
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
-            {sortDir === 'desc' ? 'Сначала новые' : 'Сначала старые'}
+            {sortDir === 'desc' ? t('student.grades.sortNewest') : t('student.grades.sortOldest')}
           </button>
         </div>
       </div>
@@ -309,11 +312,31 @@ export default function GradesPage() {
         }
       </div>
 
+      {/* Course tabs */}
+      {!loading && courses.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          {courses.map(c => (
+            <button
+              key={c.enrollmentId}
+              onClick={() => setSelectedCourseId(c.enrollmentId)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 flex items-center gap-2 ${
+                selectedCourseId === c.enrollmentId
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary-300 dark:hover:border-primary-700'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              {c.courseName}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-4">
-          {Array.from({ length: 2 }).map((_, i) => <GradeSectionSkeleton key={i} />)}
+          {Array.from({ length: 1 }).map((_, i) => <GradeSectionSkeleton key={i} />)}
         </div>
-      ) : filteredCourses.length === 0 ? (
+      ) : !activeFiltered ? (
         <div className="card">
           <EmptyState
             icon={Award}
@@ -323,7 +346,7 @@ export default function GradesPage() {
         </div>
       ) : (
         <div className="space-y-4 animate-[fadeSlideUp_0.4s_0.2s_ease_both] opacity-0 [animation-fill-mode:forwards]">
-          {filteredCourses.map((course) => {
+          {[activeFiltered].map((course) => {
             const style = course.averageGrade != null ? gradeStyle(course.averageGrade) : null
             return (
               <div key={course.enrollmentId} className="card overflow-hidden">

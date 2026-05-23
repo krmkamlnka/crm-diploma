@@ -136,6 +136,14 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
+    public List<UUID> getEnrolledCourseIds(UUID userId) {
+        log.info("Fetching enrolled course IDs for user {}", userId);
+        return studentRepository.findAllByUserId(userId).stream()
+                .map(student -> student.getCourse().getId())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public StudentPerformanceResponse getStudentDetails(UUID studentId, UUID requestingUserId) {
         log.info("Fetching student details {} for user {}", studentId, requestingUserId);
 
@@ -156,6 +164,18 @@ public class StudentService {
         }
 
         return mapToPerformanceResponse(student);
+    }
+
+    @Transactional(readOnly = true)
+    public StudentPerformanceResponse getStudentDetailsByUserId(UUID userId, UUID requestingUserId) {
+        log.info("Fetching student details by userId {} for user {}", userId, requestingUserId);
+        List<Student> enrollments = studentRepository.findAllByUserId(userId);
+        if (enrollments.isEmpty()) {
+            throw new ResourceNotFoundException("Student enrollment not found for user " + userId);
+        }
+        // Use the first enrollment — enough for analytics navigation
+        Student student = enrollments.get(0);
+        return getStudentDetails(student.getId(), requestingUserId);
     }
 
     @Transactional(readOnly = true)
@@ -194,6 +214,7 @@ public class StudentService {
 
             return DeadlineResponse.builder()
                     .homeworkId(hw.getId())
+                    .lessonId(hw.getLesson().getId())
                     .courseTitle(hw.getLesson().getCourse().getName())
                     .homeworkTitle(hw.getTitle())
                     .dueDate(hw.getDueDate())

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart2,
   Users,
@@ -10,7 +11,24 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import AnimatedStatCard from '../../components/common/AnimatedStatCard'
+import LessonDetailModal from '../../components/instructor/LessonDetailModal'
 import api from '../../services/api'
+
+interface LessonResponse {
+  id: string
+  courseId: string
+  courseName: string
+  title: string
+  scheduledAt: string
+  durationMinutes?: number
+  location?: string
+  onlineMeetingUrl?: string
+  recordingUrl?: string
+  status?: string
+  hasHomework?: boolean
+  attendanceCount?: number
+  totalStudents?: number
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,8 +43,10 @@ interface GradeDistributionItem {
 }
 
 interface AttendanceTrendItem {
+  lessonId: string
   lesson: string
   rate: number
+  scheduledAt?: string
 }
 
 interface StudentRankItem {
@@ -70,7 +90,7 @@ function GradeBar({ label, count, color, max }: { label: string; count: number; 
   )
 }
 
-function AttendanceChart({ data }: { data: AttendanceTrendItem[] }) {
+function AttendanceChart({ data, onBarClick }: { data: AttendanceTrendItem[]; onBarClick: (lessonId: string) => void }) {
   return (
     <div className="flex items-end gap-2 mt-2" style={{ height: '144px' }}>
       {data.map((d) => {
@@ -79,20 +99,29 @@ function AttendanceChart({ data }: { data: AttendanceTrendItem[] }) {
           d.rate >= 90 ? 'bg-emerald-500' :
           d.rate >= 75 ? 'bg-blue-500' :
           d.rate >= 60 ? 'bg-amber-500' : 'bg-red-500'
+        const clickable = !!d.lessonId
         return (
-          <div key={d.lesson} className="flex-1 flex flex-col items-center justify-end gap-1 group h-full">
+          <div
+            key={d.lesson}
+            className={`flex-1 flex flex-col items-center justify-end gap-1 group h-full ${clickable ? 'cursor-pointer' : ''}`}
+            onClick={() => clickable && onBarClick(d.lessonId)}
+            title={clickable ? `${d.lesson}: ${d.rate}% — перейти к уроку` : `${d.lesson}: ${d.rate}%`}
+          >
             <div className="relative flex justify-center w-full">
               <div
-                className={`w-full max-w-[32px] rounded-t-lg ${color} opacity-80 group-hover:opacity-100 transition-all duration-500 relative`}
+                className={`w-full max-w-[32px] rounded-t-lg ${color} opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300 relative`}
                 style={{ height: `${heightPx}px` }}
-                title={`${d.lesson}: ${d.rate}%`}
               >
                 <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-gray-600 dark:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                   {d.rate}%
                 </span>
               </div>
             </div>
-            <span className="text-[9px] text-gray-400 dark:text-gray-500 text-center leading-tight shrink-0">{d.lesson.replace('Урок ', 'У')}</span>
+            <span className="text-[9px] text-gray-400 dark:text-gray-500 group-hover:text-primary-500 dark:group-hover:text-primary-400 text-center leading-tight shrink-0 transition-colors">
+              {d.scheduledAt
+                ? `${new Date(d.scheduledAt).getDate().toString().padStart(2, '0')}.${(new Date(d.scheduledAt).getMonth() + 1).toString().padStart(2, '0')}`
+                : d.lesson.replace('Урок ', 'У')}
+            </span>
           </div>
         )
       })}
@@ -109,7 +138,19 @@ export default function InstructorAnalyticsPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [loadingCourses, setLoadingCourses] = useState(true)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [selectedLesson, setSelectedLesson] = useState<LessonResponse | null>(null)
   const { t } = useTranslation()
+  const navigate = useNavigate()
+
+  const openLessonById = async (lessonId: string) => {
+    if (!lessonId) return
+    try {
+      const res = await api.get<LessonResponse>(`/instructor/lessons/${lessonId}`)
+      setSelectedLesson(res.data)
+    } catch (err) {
+      console.error('Failed to load lesson:', err)
+    }
+  }
 
   // Load instructor courses
   useEffect(() => {
@@ -267,7 +308,10 @@ export default function InstructorAnalyticsPage() {
               {stats.attendanceTrend.length === 0 ? (
                 <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">{t('instructor.analytics.noAttendance')}</p>
               ) : (
-                <AttendanceChart data={stats.attendanceTrend} />
+                <AttendanceChart
+                  data={stats.attendanceTrend}
+                  onBarClick={openLessonById}
+                />
               )}
               <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> ≥90%</span>
@@ -291,14 +335,20 @@ export default function InstructorAnalyticsPage() {
               ) : (
                 <div className="space-y-3">
                   {stats.topStudents.map((s, i) => (
-                    <div key={s.userId} className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    <div
+                      key={s.userId}
+                      onClick={() => navigate(`/instructor/students/by-user/${s.userId}`)}
+                      className="flex items-center gap-3 px-2 py-1.5 rounded-xl cursor-pointer
+                                 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                    >
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                         i === 0 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
                         i === 1 ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' :
                         'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
                       }`}>{i + 1}</span>
-                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{s.firstName} {s.lastName}</span>
+                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{s.firstName} {s.lastName}</span>
                       <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{s.avg}</span>
+                      <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-gray-300 dark:text-gray-600 group-hover:text-primary-500 transition-colors shrink-0" />
                     </div>
                   ))}
                 </div>
@@ -316,18 +366,24 @@ export default function InstructorAnalyticsPage() {
               ) : (
                 <div className="space-y-3">
                   {stats.bottomStudents.map((s) => (
-                    <div key={s.userId} className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-gray-800 dark:text-gray-200">{s.firstName} {s.lastName}</span>
-                          <span className="text-sm font-semibold text-red-500 dark:text-red-400">{s.avg}</span>
-                        </div>
-                        <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className="h-full bg-red-400 rounded-full transition-all duration-700"
-                            style={{ width: `${s.avg}%` }}
-                          />
-                        </div>
+                    <div
+                      key={s.userId}
+                      onClick={() => navigate(`/instructor/students/by-user/${s.userId}`)}
+                      className="px-2 py-1.5 rounded-xl cursor-pointer
+                                 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-gray-800 dark:text-gray-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex items-center gap-1.5">
+                          {s.firstName} {s.lastName}
+                          <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-gray-300 dark:text-gray-600 group-hover:text-primary-500 transition-colors" />
+                        </span>
+                        <span className="text-sm font-semibold text-red-500 dark:text-red-400">{s.avg}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-red-400 rounded-full transition-all duration-700"
+                          style={{ width: `${s.avg}%` }}
+                        />
                       </div>
                     </div>
                   ))}
@@ -336,6 +392,28 @@ export default function InstructorAnalyticsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {selectedLesson && (
+        <LessonDetailModal
+          lesson={{
+            id: selectedLesson.id,
+            courseId: selectedLesson.courseId,
+            courseName: selectedLesson.courseName,
+            title: selectedLesson.title,
+            scheduledAt: selectedLesson.scheduledAt,
+            durationMinutes: selectedLesson.durationMinutes,
+            location: selectedLesson.location,
+            onlineMeetingUrl: selectedLesson.onlineMeetingUrl,
+            recordingUrl: selectedLesson.recordingUrl,
+            status: selectedLesson.status ?? 'SCHEDULED',
+            hasHomework: selectedLesson.hasHomework ?? false,
+            attendanceCount: selectedLesson.attendanceCount,
+            totalStudents: selectedLesson.totalStudents,
+          }}
+          onClose={() => setSelectedLesson(null)}
+          onSave={() => setSelectedLesson(null)}
+        />
       )}
     </div>
   )

@@ -122,6 +122,8 @@ public class JwtTokenProvider {
             log.error("JWT токен не поддерживается: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
             log.error("JWT claims пустой: {}", e.getMessage());
+        } catch (JwtException e) {
+            log.error("Невалидный JWT токен: {}", e.getMessage());
         }
         return false;
     }
@@ -146,6 +148,8 @@ public class JwtTokenProvider {
             log.error("Refresh токен не поддерживается: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
             log.error("Refresh токен claims пустой: {}", e.getMessage());
+        } catch (JwtException e) {
+            log.error("Невалидный refresh токен: {}", e.getMessage());
         }
         return false;
     }

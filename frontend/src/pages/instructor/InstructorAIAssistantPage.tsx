@@ -1,13 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Bot, User, BookOpen } from 'lucide-react'
+import { Send, Bot, User, BookOpen, Plus, Trash2, MessageSquare, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import api from '../../services/api'
 
 interface Message {
-  id: number
+  id: string
   text: string
   sender: 'user' | 'ai'
   timestamp: Date
+}
+
+interface Session {
+  id: string
+  title: string
+  courseId: string | null
+  updatedAt: string
 }
 
 interface Course {
@@ -15,73 +22,139 @@ interface Course {
   name: string
 }
 
+const GREETING = 'Привет! Я ваш AI-помощник. Выберите курс выше, и я смогу помогать вам анализировать успеваемость студентов, выявлять отстающих и давать рекомендации.'
+
 export default function InstructorAIAssistantPage() {
-  const [courses, setCourses] = useState<Course[]>([])
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('')
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: 'Привет! Я ваш AI-помощник. Выберите курс выше, и я смогу помогать вам анализировать успеваемость студентов, выявлять отстающих и давать рекомендации.',
-      sender: 'ai',
-      timestamp: new Date(),
-    },
-  ])
-  const [inputText, setInputText] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [courses, setCourses]               = useState<Course[]>([])
+  const [selectedCourseId, setSelectedCourse] = useState<string>('')
+  const [sessions, setSessions]             = useState<Session[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [messages, setMessages]             = useState<Message[]>([])
+  const [inputText, setInputText]           = useState('')
+  const [isLoading, setIsLoading]           = useState(false)
+  const [sidebarOpen, setSidebarOpen]       = useState(true)
+  const [hoveredMsgId, setHoveredMsgId]     = useState<string | null>(null)
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const greeting: Message = { id: 'greeting', text: GREETING, sender: 'ai', timestamp: new Date() }
 
   useEffect(() => {
     api.get<{ content: Course[] }>('/instructor/courses')
-      .then((res) => {
+      .then(res => {
         const list = res.data.content ?? (res.data as unknown as Course[])
         setCourses(list)
-        if (list.length > 0) setSelectedCourseId(list[0].id)
+        if (list.length > 0) setSelectedCourse(list[0].id)
       })
       .catch(() => {})
+    loadSessions()
   }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    if (!messages.length) setMessages([greeting])
+  }, [])
+
+  const loadSessions = () => {
+    api.get<Session[]>('/instructor/ai/sessions')
+      .then(res => setSessions(res.data))
+      .catch(() => {})
+  }
+
+  const openSession = async (sessionId: string) => {
+    try {
+      const res = await api.get<{ messages: { id: string; role: string; content: string; createdAt: string }[] }>(
+        `/instructor/ai/sessions/${sessionId}`
+      )
+      setActiveSessionId(sessionId)
+      setMessages(res.data.messages.length === 0
+        ? [greeting]
+        : res.data.messages.map(m => ({
+            id: m.id,
+            text: m.content,
+            sender: m.role === 'user' ? 'user' : 'ai',
+            timestamp: new Date(m.createdAt),
+          }))
+      )
+    } catch {
+      setMessages([greeting])
+    }
+  }
+
+  const newChat = async () => {
+    if (!selectedCourseId) return
+    try {
+      const res = await api.post<Session>(`/instructor/ai/sessions?courseId=${selectedCourseId}`)
+      setSessions(prev => [res.data, ...prev])
+      setActiveSessionId(res.data.id)
+      setMessages([greeting])
+    } catch {
+      setActiveSessionId(null)
+      setMessages([greeting])
+    }
+  }
+
+  const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeletingSessionId(sessionId)
+    try {
+      await api.delete(`/instructor/ai/sessions/${sessionId}`)
+      setSessions(prev => prev.filter(s => s.id !== sessionId))
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(null)
+        setMessages([greeting])
+      }
+    } catch {} finally {
+      setDeletingSessionId(null)
+    }
+  }
+
+  const deleteMessage = async (msgId: string) => {
+    if (msgId === 'greeting') return
+    try {
+      await api.delete(`/instructor/ai/messages/${msgId}`)
+      setMessages(prev => prev.filter(m => m.id !== msgId))
+    } catch {}
+  }
+
   const handleSend = async () => {
     const text = inputText.trim()
     if (!text || !selectedCourseId || isLoading) return
 
-    const userMessage: Message = {
-      id: Date.now(),
-      text,
-      sender: 'user',
-      timestamp: new Date(),
-    }
-    setMessages((prev) => [...prev, userMessage])
+    const userMsg: Message = { id: `tmp-${Date.now()}`, text, sender: 'user', timestamp: new Date() }
+    setMessages(prev => [...prev, userMsg])
     setInputText('')
     setIsLoading(true)
 
     try {
-      const res = await api.post<{ reply: string }>(
-        `/instructor/ai/chat?courseId=${selectedCourseId}`,
-        { message: text }
-      )
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          text: res.data.reply,
-          sender: 'ai',
-          timestamp: new Date(),
-        },
-      ])
+      const url = activeSessionId
+        ? `/instructor/ai/chat?courseId=${selectedCourseId}&sessionId=${activeSessionId}`
+        : `/instructor/ai/chat?courseId=${selectedCourseId}`
+
+      const res = await api.post<{ reply: string; sessionId: string; messageId: string }>(url, { message: text })
+
+      if (!activeSessionId) {
+        setActiveSessionId(res.data.sessionId)
+      }
+      loadSessions()
+
+      setMessages(prev => [...prev, {
+        id: res.data.messageId,
+        text: res.data.reply,
+        sender: 'ai',
+        timestamp: new Date(),
+      }])
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          text: 'Произошла ошибка при обращении к AI. Попробуйте ещё раз.',
-          sender: 'ai',
-          timestamp: new Date(),
-        },
-      ])
+      setMessages(prev => [...prev, {
+        id: `err-${Date.now()}`,
+        text: 'Произошла ошибка при обращении к AI. Попробуйте ещё раз.',
+        sender: 'ai',
+        timestamp: new Date(),
+      }])
     } finally {
       setIsLoading(false)
     }
@@ -94,149 +167,231 @@ export default function InstructorAIAssistantPage() {
     'Дай общий анализ успеваемости группы',
   ]
 
-  const selectedCourse = courses.find((c) => c.id === selectedCourseId)
+  const selectedCourse = courses.find(c => c.id === selectedCourseId)
 
   return (
-    <div className="h-[calc(100vh-12rem)] flex flex-col">
-      <div className="mb-4 animate-fadeSlideDown">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI Ассистент</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Анализ успеваемости студентов с помощью AI</p>
-      </div>
+    <div className="h-[calc(100vh-7rem)] flex gap-4">
 
-      {/* Course selector */}
-      {courses.length > 1 && (
-        <div className="flex items-center gap-3 mb-4">
-          <BookOpen className="w-5 h-5 text-gray-500 dark:text-gray-400 shrink-0" />
-          <select
-            value={selectedCourseId}
-            onChange={(e) => {
-              setSelectedCourseId(e.target.value)
-              setMessages([{
-                id: Date.now(),
-                text: 'Курс выбран. Задавайте вопросы о студентах и успеваемости!',
-                sender: 'ai',
-                timestamp: new Date(),
-              }])
-            }}
-            className="input-field max-w-xs"
+      {/* Sidebar */}
+      <aside className={`flex flex-col shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
+        <div className="card flex flex-col h-full p-3 gap-2 min-w-[256px]">
+          <button
+            onClick={newChat}
+            disabled={!selectedCourseId}
+            className="flex items-center gap-2 w-full px-3 py-2.5
+                       bg-violet-50 dark:bg-violet-900/20
+                       hover:bg-violet-100 dark:hover:bg-violet-900/40
+                       border border-violet-200 dark:border-violet-800/50
+                       text-violet-700 dark:text-violet-400 font-medium text-sm
+                       rounded-xl transition-all duration-200 disabled:opacity-40"
           >
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            <Plus className="w-4 h-4" />
+            Новый чат
+          </button>
+
+          <div className="flex-1 overflow-y-auto space-y-1">
+            {sessions.length === 0 && (
+              <p className="text-xs text-gray-400 dark:text-gray-600 text-center py-6 px-2">
+                История пуста
+              </p>
+            )}
+            {sessions.map(s => (
+              <div
+                key={s.id}
+                onClick={() => openSession(s.id)}
+                className={`group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150 ${
+                  activeSessionId === s.id
+                    ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-800/60 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                <span className="text-xs flex-1 truncate">{s.title}</span>
+                <button
+                  onClick={(e) => deleteSession(s.id, e)}
+                  disabled={deletingSessionId === s.id}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-500 transition-all shrink-0"
+                >
+                  {deletingSessionId === s.id
+                    ? <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    : <Trash2 className="w-3 h-3" />
+                  }
+                </button>
+              </div>
             ))}
-          </select>
+          </div>
         </div>
-      )}
+      </aside>
 
-      {courses.length === 1 && (
-        <div className="flex items-center gap-2 mb-4 text-sm text-gray-500 dark:text-gray-400">
-          <BookOpen className="w-4 h-4" />
-          <span>Курс: <span className="font-medium text-gray-700 dark:text-gray-300">{selectedCourse?.name}</span></span>
-        </div>
-      )}
-
-      <div className="card flex-1 flex flex-col min-h-0">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-1">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+      {/* Main */}
+      <div className="flex-1 flex flex-col gap-4 min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between animate-[fadeSlideDown_0.4s_ease_both]">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.sender === 'ai'
-                    ? 'bg-violet-100 dark:bg-violet-900/30'
-                    : 'bg-gray-200 dark:bg-gray-700'
-                }`}
-              >
-                {message.sender === 'ai' ? (
-                  <Bot className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                ) : (
-                  <User className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                )}
-              </div>
-              <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                  message.sender === 'ai'
-                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                    : 'bg-violet-600 text-white'
-                }`}
-              >
-                {message.sender === 'ai' ? (
-                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none
-                    prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0
-                    prose-headings:my-2 prose-code:bg-gray-200 dark:prose-code:bg-gray-600
-                    prose-code:px-1 prose-code:rounded prose-pre:bg-gray-200
-                    dark:prose-pre:bg-gray-600 prose-pre:p-3 prose-pre:rounded-lg">
-                    <ReactMarkdown>{message.text}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-                )}
-                <p className={`text-xs mt-1 ${
-                  message.sender === 'ai'
-                    ? 'text-gray-400 dark:text-gray-500'
-                    : 'text-violet-200'
-                }`}>
-                  {message.timestamp.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
+              {sidebarOpen ? <X className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI Ассистент</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Анализ успеваемости студентов с помощью AI</p>
             </div>
-          ))}
+          </div>
 
-          {/* Loading indicator */}
-          {isLoading && (
-            <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
-                <Bot className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+          {courses.length > 1 && (
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-gray-400 shrink-0" />
+              <select
+                value={selectedCourseId}
+                onChange={e => {
+                  setSelectedCourse(e.target.value)
+                  setActiveSessionId(null)
+                  setMessages([greeting])
+                }}
+                className="input-field text-sm py-2 max-w-[220px]"
+              >
+                {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {courses.length === 1 && selectedCourse && (
+            <div className="flex items-center gap-2 px-3 py-1.5
+                            bg-violet-50 dark:bg-violet-900/20
+                            border border-violet-100 dark:border-violet-800/50
+                            rounded-xl text-sm">
+              <BookOpen className="w-3.5 h-3.5 text-violet-500" />
+              <span className="font-medium text-violet-700 dark:text-violet-400">{selectedCourse.name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Chat */}
+        <div className="card flex-1 flex flex-col min-h-0 p-0 overflow-hidden">
+          <div className="h-px bg-gradient-to-r from-transparent via-violet-400/40 to-transparent shrink-0" />
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {messages.map((message, idx) => (
+              <div
+                key={message.id}
+                className={`flex gap-3 group animate-[fadeSlideUp_0.3s_ease_both] ${
+                  message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
+                }`}
+                style={{ animationDelay: `${idx * 20}ms` }}
+                onMouseEnter={() => setHoveredMsgId(message.id)}
+                onMouseLeave={() => setHoveredMsgId(null)}
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                  message.sender === 'ai'
+                    ? 'bg-violet-100 dark:bg-violet-900/40'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                }`}>
+                  {message.sender === 'ai'
+                    ? <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                    : <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  }
+                </div>
+
+                <div className="flex flex-col gap-1 max-w-[75%]">
+                  <div className={`rounded-2xl px-4 py-3 shadow-sm ${
+                    message.sender === 'ai'
+                      ? 'bg-gray-50 dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700/60 text-gray-900 dark:text-gray-100 rounded-tl-sm'
+                      : 'bg-violet-600 text-white rounded-tr-sm'
+                  }`}>
+                    {message.sender === 'ai' ? (
+                      <div className="text-sm prose prose-sm dark:prose-invert max-w-none
+                        prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:my-2
+                        prose-code:bg-gray-200 dark:prose-code:bg-gray-600/80
+                        prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs">
+                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                    )}
+                    <p className={`text-[11px] mt-1.5 ${
+                      message.sender === 'ai' ? 'text-gray-400 dark:text-gray-500' : 'text-violet-200'
+                    }`}>
+                      {message.timestamp.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+
+                  {hoveredMsgId === message.id && message.id !== 'greeting' && (
+                    <button
+                      onClick={() => deleteMessage(message.id)}
+                      className={`self-${message.sender === 'user' ? 'end' : 'start'} flex items-center gap-1
+                                  text-xs text-gray-400 hover:text-red-500 transition-colors px-1`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Удалить
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl px-4 py-3 flex items-center gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            ))}
+
+            {isLoading && (
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+                  <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700/60
+                                rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
+                  {[0, 150, 300].map(delay => (
+                    <span key={delay} className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"
+                      style={{ animationDelay: `${delay}ms` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {messages.length <= 1 && !isLoading && (
+            <div className="px-5 pb-4 border-t border-gray-100/80 dark:border-gray-800/60 pt-4">
+              <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">Быстрые вопросы</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {quickQuestions.map((q, i) => (
+                  <button key={i} onClick={() => setInputText(q)}
+                    className="text-left p-3 bg-violet-50/60 dark:bg-violet-900/15
+                               hover:bg-violet-100 dark:hover:bg-violet-900/30
+                               border border-violet-100 dark:border-violet-800/40
+                               text-violet-700 dark:text-violet-400
+                               rounded-xl text-sm transition-all duration-200 hover:-translate-y-0.5">
+                    {q}
+                  </button>
+                ))}
               </div>
             </div>
           )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* Quick questions — shown at start */}
-        {messages.length === 1 && (
-          <div className="mb-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Быстрые вопросы:</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {quickQuestions.map((q, i) => (
-                <button
-                  key={i}
-                  onClick={() => setInputText(q)}
-                  className="text-left p-3 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded-xl text-sm transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+          <div className="px-5 pb-5 pt-3 border-t border-gray-100/80 dark:border-gray-800/60 flex gap-3">
+            <input
+              type="text"
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder={selectedCourseId ? 'Задайте вопрос о студентах...' : 'Выберите курс для начала...'}
+              disabled={!selectedCourseId || isLoading}
+              className="input-field flex-1 disabled:opacity-50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!inputText.trim() || !selectedCourseId || isLoading}
+              className="flex items-center gap-2 px-5 py-2.5
+                         bg-violet-600 hover:bg-violet-700 text-white
+                         font-semibold text-sm rounded-xl
+                         disabled:opacity-40 disabled:cursor-not-allowed
+                         transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+            >
+              {isLoading
+                ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <Send className="w-4 h-4" />
+              }
+              <span className="hidden sm:inline">Отправить</span>
+            </button>
           </div>
-        )}
-
-        {/* Input */}
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder={selectedCourseId ? 'Задайте вопрос о студентах...' : 'Выберите курс для начала...'}
-            disabled={!selectedCourseId || isLoading}
-            className="input-field flex-1 disabled:opacity-50"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim() || !selectedCourseId || isLoading}
-            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium text-sm flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-          >
-            <Send className="w-4 h-4" />
-            <span>Отправить</span>
-          </button>
         </div>
       </div>
     </div>

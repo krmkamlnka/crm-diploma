@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * REST контроллер для управления пользователями (только для администраторов)
@@ -139,6 +140,17 @@ public class UserController {
         userService.deleteUser(id);
 
         return ResponseEntity.ok(Map.of("message", "Пользователь успешно удален"));
+    }
+
+    /**
+     * Получить ID курсов, на которые записан студент
+     * GET /api/v1/admin/users/{userId}/enrolled-courses
+     */
+    @GetMapping("/{userId}/enrolled-courses")
+    public ResponseEntity<List<UUID>> getEnrolledCourseIds(@PathVariable UUID userId) {
+        log.info("GET /api/v1/admin/users/{}/enrolled-courses", userId);
+        List<UUID> courseIds = studentService.getEnrolledCourseIds(userId);
+        return ResponseEntity.ok(courseIds);
     }
 
     /**

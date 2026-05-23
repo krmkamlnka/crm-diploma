@@ -1,6 +1,7 @@
 package kz.attractorschool.backend.invitation;
 
 import jakarta.persistence.*;
+import kz.attractorschool.backend.shared.encryption.EncryptedStringConverter;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRole;
 import lombok.*;
@@ -11,10 +12,6 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Сущность приглашения пользователя в систему
- * Соответствует таблице invitations в БД
- */
 @Entity
 @Table(name = "invitations")
 @Getter
@@ -28,8 +25,12 @@ public class Invitation {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, length = 255)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String email;
+
+    @Column(name = "email_hash", nullable = false, length = 64)
+    private String emailHash;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)

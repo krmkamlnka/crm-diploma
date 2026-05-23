@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
 import StudentLessonDetailModal from '../../components/student/StudentLessonDetailModal'
 
@@ -8,6 +9,7 @@ interface LessonResponse {
   courseId: string
   courseName: string
   title: string
+  description?: string
   scheduledAt: string
   durationMinutes: number
   location?: string
@@ -24,8 +26,13 @@ interface LessonForModal {
   courseId: string
   courseName: string
   title: string
+  description?: string
   date: string
   time: string
+  durationMinutes?: number
+  location?: string
+  onlineMeetingUrl?: string
+  status?: string
   materials: { id: string; name: string; url: string; type: 'pdf' | 'docx' }[]
   recordingUrl?: string
   homework?: {
@@ -33,13 +40,26 @@ interface LessonForModal {
     title: string
     description: string
     deadline: string
-    homeworkFileId?: string   // ID домашнего задания для скачивания файла задания
+    homeworkFileId?: string
     submittedUrl?: string
     grade?: number
+    maxGrade?: number
+    feedback?: string
   }
 }
 
+// Ordered palette: each course gets a distinct color slot
+const COURSE_COLORS = [
+  { bg: 'bg-blue-100 dark:bg-blue-900/40',   hover: 'hover:bg-blue-200 dark:hover:bg-blue-900/60',   text: 'text-blue-800 dark:text-blue-200',   sub: 'text-blue-600 dark:text-blue-400' },
+  { bg: 'bg-violet-100 dark:bg-violet-900/40', hover: 'hover:bg-violet-200 dark:hover:bg-violet-900/60', text: 'text-violet-800 dark:text-violet-200', sub: 'text-violet-600 dark:text-violet-400' },
+  { bg: 'bg-emerald-100 dark:bg-emerald-900/40', hover: 'hover:bg-emerald-200 dark:hover:bg-emerald-900/60', text: 'text-emerald-800 dark:text-emerald-200', sub: 'text-emerald-600 dark:text-emerald-400' },
+  { bg: 'bg-amber-100 dark:bg-amber-900/40',  hover: 'hover:bg-amber-200 dark:hover:bg-amber-900/60',  text: 'text-amber-800 dark:text-amber-200',  sub: 'text-amber-600 dark:text-amber-400' },
+  { bg: 'bg-rose-100 dark:bg-rose-900/40',    hover: 'hover:bg-rose-200 dark:hover:bg-rose-900/60',    text: 'text-rose-800 dark:text-rose-200',    sub: 'text-rose-600 dark:text-rose-400' },
+  { bg: 'bg-cyan-100 dark:bg-cyan-900/40',    hover: 'hover:bg-cyan-200 dark:hover:bg-cyan-900/60',    text: 'text-cyan-800 dark:text-cyan-200',    sub: 'text-cyan-600 dark:text-cyan-400' },
+]
+
 export default function CalendarPage() {
+  const { t, i18n } = useTranslation()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [lessons, setLessons] = useState<LessonResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,6 +113,7 @@ export default function CalendarPage() {
           title: string
           description: string
           deadline: string
+          maxGrade?: number
           taskFileUrl?: string
         }>(`/instructor/lessons/${lesson.id}/homework`)
         const hw = hwRes.data
@@ -100,12 +121,14 @@ export default function CalendarPage() {
         // Check if student already submitted
         let submittedUrl: string | undefined
         let grade: number | undefined
+        let feedback: string | undefined
         try {
-          const subRes = await api.get<{ githubUrl?: string; grade?: number }>(
+          const subRes = await api.get<{ githubUrl?: string; grade?: number; feedback?: string }>(
             `/student/homework/${hw.id}/my-submission`
           )
           submittedUrl = subRes.data.githubUrl
           grade = subRes.data.grade
+          feedback = subRes.data.feedback
         } catch {}
 
         homework = {
@@ -113,9 +136,11 @@ export default function CalendarPage() {
           title: hw.title,
           description: hw.description,
           deadline: hw.deadline,
+          maxGrade: hw.maxGrade,
           homeworkFileId: hw.taskFileUrl ? hw.id : undefined,
           submittedUrl,
           grade,
+          feedback,
         }
       } catch {
         // No homework for this lesson — that's fine
@@ -126,8 +151,13 @@ export default function CalendarPage() {
         courseId: lesson.courseId,
         courseName: lesson.courseName,
         title: lesson.title,
+        description: lesson.description,
         date,
         time,
+        durationMinutes: lesson.durationMinutes,
+        location: lesson.location,
+        onlineMeetingUrl: lesson.onlineMeetingUrl,
+        status: lesson.status,
         materials,
         recordingUrl: lesson.recordingUrl,
         homework,
@@ -172,20 +202,40 @@ export default function CalendarPage() {
     setCurrentDate(d)
   }
 
+  // Build stable courseId → color index mapping (sorted by first appearance)
+  const courseColorMap = useMemo(() => {
+    const seen = new Map<string, number>()
+    lessons.forEach(l => {
+      if (!seen.has(l.courseId)) seen.set(l.courseId, seen.size % COURSE_COLORS.length)
+    })
+    return seen
+  }, [lessons])
+
+  const getCourseColor = (courseId: string) =>
+    COURSE_COLORS[courseColorMap.get(courseId) ?? 0]
+
   const days = getDaysInMonth(currentDate)
-  const weekDays = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+  const weekDays = useMemo(() => {
+    const locale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(2023, 0, i + 1)
+      return date.toLocaleDateString(locale, { weekday: 'short' })
+    })
+  }, [i18n.language])
+
+  const monthLocale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Календарь занятий</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Расписание, материалы и домашние задания</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('student.calendar.title')}</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">{t('student.calendar.subtitle')}</p>
       </div>
 
       <div className="card flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            {currentDate.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+            {currentDate.toLocaleDateString(monthLocale, { month: 'long', year: 'numeric' })}
           </h2>
           <div className="flex gap-2">
             <button onClick={prevMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
@@ -234,17 +284,20 @@ export default function CalendarPage() {
                   </div>
 
                   <div className="space-y-1">
-                    {dayLessons.map(lesson => (
-                      <div
-                        key={lesson.id}
-                        onClick={() => !loadingModal && handleLessonClick(lesson)}
-                        className="text-xs p-2 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                      >
-                        <div className="font-medium truncate">{getLessonTime(lesson.scheduledAt)}</div>
-                        <div className="truncate">{lesson.title}</div>
-                        <div className="text-[10px] opacity-75 truncate">{lesson.courseName}</div>
-                      </div>
-                    ))}
+                    {dayLessons.map(lesson => {
+                      const color = getCourseColor(lesson.courseId)
+                      return (
+                        <div
+                          key={lesson.id}
+                          onClick={() => !loadingModal && handleLessonClick(lesson)}
+                          className={`text-xs p-2 rounded cursor-pointer transition-colors ${color.bg} ${color.hover} ${color.text}`}
+                        >
+                          <div className="font-semibold truncate">{getLessonTime(lesson.scheduledAt)}</div>
+                          <div className="truncate">{lesson.title}</div>
+                          <div className={`text-[10px] truncate ${color.sub}`}>{lesson.courseName}</div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )

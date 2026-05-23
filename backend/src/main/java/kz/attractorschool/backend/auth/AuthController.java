@@ -4,9 +4,11 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import kz.attractorschool.backend.auth.dto.AuthResponse;
+import kz.attractorschool.backend.auth.dto.ForgotPasswordRequest;
 import kz.attractorschool.backend.auth.dto.LoginRequest;
 import kz.attractorschool.backend.auth.dto.RefreshTokenRequest;
 import kz.attractorschool.backend.auth.dto.RegisterRequest;
+import kz.attractorschool.backend.auth.dto.ResetPasswordRequest;
 import kz.attractorschool.backend.auth.dto.VerifyEmailRequest;
 import kz.attractorschool.backend.user.dto.UserDTO;
 import lombok.RequiredArgsConstructor;
@@ -121,6 +123,24 @@ public class AuthController {
         setAuthCookies(httpResponse, response.getAccessToken(), response.getRefreshToken());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Запрос сброса пароля — отправляет письмо с токеном
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        log.info("POST /api/v1/auth/forgot-password - запрос сброса пароля: {}", request.getEmail());
+        return ResponseEntity.ok(authService.forgotPassword(request));
+    }
+
+    /**
+     * Сброс пароля по токену из письма
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        log.info("POST /api/v1/auth/reset-password - сброс пароля по токену");
+        return ResponseEntity.ok(authService.resetPassword(request));
     }
 
     /**

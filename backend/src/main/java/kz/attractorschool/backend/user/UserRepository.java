@@ -13,11 +13,14 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    Optional<User> findByEmail(String email);
+    // Поиск по хешу email — работает даже когда сам email зашифрован
+    Optional<User> findByEmailHash(String emailHash);
 
-    boolean existsByEmail(String email);
+    boolean existsByEmailHash(String emailHash);
 
     Optional<User> findByEmailVerificationToken(String token);
+
+    Optional<User> findByPasswordResetToken(String token);
 
     long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
@@ -31,4 +34,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT u FROM User u WHERE u.role IN ('ADMIN', 'SUPER_ADMIN')")
     List<User> findAllAdmins();
+
+    // Поиск контактов по имени/фамилии — email-поиск убран, т.к. он зашифрован
+    @Query("""
+        SELECT u FROM User u
+        WHERE u.id <> :excludeId
+          AND u.status = 'ACTIVE'
+          AND u.role IN :roles
+        ORDER BY u.firstName, u.lastName
+    """)
+    List<User> searchContacts(@Param("excludeId") UUID excludeId,
+                              @Param("roles") List<UserRole> roles);
 }

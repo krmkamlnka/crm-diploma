@@ -28,7 +28,7 @@ public class GeminiService {
     private String apiKey;
 
     private static final String OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-    private static final String MODEL = "google/gemma-3n-e2b-it:free";
+    private static final String MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
     public String chat(UUID studentUserId, UUID enrollmentId, String userMessage) {
         StudentPerformanceResponse perf = studentService.getStudentDetails(enrollmentId, studentUserId);
@@ -40,6 +40,7 @@ public class GeminiService {
         Map<String, Object> body = new HashMap<>();
         body.put("model", MODEL);
         body.put("messages", List.of(userMsg));
+        body.put("reasoning", Map.of("enabled", true));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -49,10 +50,23 @@ public class GeminiService {
 
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(OPENROUTER_URL, entity, Map.class);
-            return extractReply(response.getBody());
+            String reply = extractReply(response.getBody());
+            if (reply == null || reply.isBlank()) {
+                throw new RuntimeException("AI вернул пустой ответ");
+            }
+            return reply;
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("OpenRouter API HTTP {} error: {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Не удалось получить ответ от AI ассистента: " + e.getStatusCode());
+            if (e.getStatusCode().value() == 429) {
+                throw new RuntimeException("AI-сервис временно перегружен. Попробуйте через несколько секунд.");
+            }
+            if (e.getStatusCode().value() == 404) {
+                throw new RuntimeException("AI-модель недоступна. Обратитесь к администратору.");
+            }
+            throw new RuntimeException("Ошибка AI-сервиса: " + e.getStatusCode());
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            log.error("OpenRouter server error {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("AI-сервис временно недоступен. Попробуйте позже.");
         } catch (Exception e) {
             log.error("OpenRouter API error: {}", e.getMessage(), e);
             throw new RuntimeException("Не удалось получить ответ от AI ассистента");
@@ -121,6 +135,7 @@ public class GeminiService {
         Map<String, Object> body = new HashMap<>();
         body.put("model", MODEL);
         body.put("messages", List.of(userMsg));
+        body.put("reasoning", Map.of("enabled", true));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -130,10 +145,20 @@ public class GeminiService {
 
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(OPENROUTER_URL, entity, Map.class);
-            return extractReply(response.getBody());
+            String reply = extractReply(response.getBody());
+            if (reply == null || reply.isBlank()) {
+                throw new RuntimeException("AI вернул пустой ответ");
+            }
+            return reply;
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("OpenRouter API HTTP {} error (instructor): {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Не удалось получить ответ от AI ассистента: " + e.getStatusCode());
+            if (e.getStatusCode().value() == 429) {
+                throw new RuntimeException("AI-сервис временно перегружен. Попробуйте через несколько секунд.");
+            }
+            throw new RuntimeException("Ошибка AI-сервиса: " + e.getStatusCode());
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            log.error("OpenRouter server error {} (instructor): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("AI-сервис временно недоступен. Попробуйте позже.");
         } catch (Exception e) {
             log.error("OpenRouter API error (instructor): {}", e.getMessage(), e);
             throw new RuntimeException("Не удалось получить ответ от AI ассистента");

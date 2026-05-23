@@ -51,7 +51,7 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
       const res = await api.post<{ code: string }>('/telegram/link-code')
       setTgCode(res.data.code)
     } catch (err: any) {
-      showToast(err?.response?.data?.message || 'Ошибка генерации кода', 'error')
+      showToast(err?.response?.data?.message || t('settings.telegramCodeError'), 'error')
     } finally {
       setTgCodeLoading(false)
     }
@@ -63,7 +63,7 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
       await api.delete('/telegram/unlink')
       setTgLinked(false)
       setTgCode(null)
-      showToast('Telegram отвязан', 'success')
+      showToast(t('settings.telegramUnlinked'), 'success')
     } catch (err: any) {
       showToast(err?.response?.data?.message || 'Ошибка', 'error')
     } finally {
@@ -74,7 +74,7 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
   const copyCode = () => {
     if (tgCode) {
       navigator.clipboard.writeText(`/link ${tgCode}`)
-      showToast('Команда скопирована', 'success')
+      showToast(t('settings.telegramCommandCopied'), 'success')
     }
   }
 
@@ -328,14 +328,14 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
         <div className="card space-y-4">
           <div className="flex items-center gap-2">
             <Send className="w-4 h-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Telegram уведомления</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('settings.telegram')}</h2>
           </div>
 
           {tgLinked ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm">
                 <CheckCircle className="w-4 h-4" />
-                <span>Telegram успешно привязан. Уведомления будут приходить в бот.</span>
+                <span>{t('settings.telegramLinked')}</span>
               </div>
               <button
                 onClick={handleUnlinkTelegram}
@@ -343,13 +343,13 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
                 className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
               >
                 <Unlink className="w-4 h-4" />
-                {tgUnlinking ? 'Отвязываем...' : 'Отвязать Telegram'}
+                {tgUnlinking ? t('settings.telegramUnlinking') : t('settings.telegramUnlink')}
               </button>
             </div>
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Привяжите аккаунт к Telegram-боту, чтобы получать все уведомления прямо в мессенджер.
+                {t('settings.telegramDesc')}
               </p>
               {!tgCode ? (
                 <button
@@ -358,21 +358,21 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
                   className="btn-primary flex items-center gap-2 disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  {tgCodeLoading ? 'Генерация...' : 'Получить код привязки'}
+                  {tgCodeLoading ? t('settings.telegramGenerating') : t('settings.telegramGetCode')}
                 </button>
               ) : (
                 <div className="space-y-3">
                   <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-2">Ваш код (действует 15 минут):</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-2">{t('settings.telegramCodeLabel')}</p>
                     <div className="flex items-center gap-3">
                       <span className="text-4xl font-mono font-bold tracking-widest text-blue-700 dark:text-blue-300">{tgCode}</span>
-                      <button onClick={copyCode} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-800 rounded-lg transition-colors" title="Скопировать команду">
+                      <button onClick={copyCode} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-800 rounded-lg transition-colors" title={t('settings.telegramCopyCommand')}>
                         <Copy className="w-4 h-4 text-blue-500" />
                       </button>
                     </div>
                     <div className="mt-3 text-xs text-blue-600 dark:text-blue-400 space-y-1">
-                      <p>1. Откройте бота в Telegram: <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">@crm_lms_bot</code></p>
-                      <p>2. Отправьте команду: <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">/link {tgCode}</code></p>
+                      <p>{t('settings.telegramStep1')} <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">@crm_lms_bot</code></p>
+                      <p>{t('settings.telegramStep2')} <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">/link {tgCode}</code></p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -381,21 +381,21 @@ export default function SettingsPage({ showPasswordChange = true }: Props) {
                       disabled={tgCodeLoading}
                       className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline"
                     >
-                      Сгенерировать новый код
+                      {t('settings.telegramNewCode')}
                     </button>
                     <button
                       onClick={async () => {
                         const res = await api.get<{ linked: boolean }>('/telegram/status')
                         if (res.data.linked) {
                           setTgLinked(true)
-                          showToast('Telegram привязан!', 'success')
+                          showToast(t('settings.telegramSuccess'), 'success')
                         } else {
-                          showToast('Telegram ещё не привязан', 'error')
+                          showToast(t('settings.telegramNotLinked'), 'error')
                         }
                       }}
                       className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
                     >
-                      Проверить статус
+                      {t('settings.telegramCheckStatus')}
                     </button>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ package kz.attractorschool.backend.course.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,8 +35,10 @@ public class CourseAnalyticsResponse {
     @Data
     @Builder
     public static class AttendanceTrendItem {
+        private UUID lessonId;
         private String lesson;
         private double rate;
+        private LocalDateTime scheduledAt;
     }
 
     @Data

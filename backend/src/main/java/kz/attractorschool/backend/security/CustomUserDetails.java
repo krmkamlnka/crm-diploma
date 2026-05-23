@@ -1,6 +1,7 @@
 package kz.attractorschool.backend.security;
 
 import kz.attractorschool.backend.user.User;
+import kz.attractorschool.backend.user.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
@@ -33,6 +34,10 @@ public class CustomUserDetails implements UserDetails {
      */
     public String getEmail() {
         return user.getEmail();
+    }
+
+    public UserRole getRole() {
+        return user.getRole();
     }
 
     /**

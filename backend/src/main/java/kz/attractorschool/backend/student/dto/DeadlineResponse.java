@@ -11,6 +11,7 @@ import java.util.UUID;
 public class DeadlineResponse {
 
     private UUID homeworkId;
+    private UUID lessonId;
     private String courseTitle;
     private String homeworkTitle;
     private LocalDateTime dueDate;

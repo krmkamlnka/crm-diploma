@@ -1,133 +1,95 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Приглашение на платформу</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 600px;
-            margin: 20px auto;
-            background: #ffffff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
-            padding: 30px 20px;
-            text-align: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-        }
-        .content {
-            padding: 30px 20px;
-        }
-        .content h2 {
-            color: #667eea;
-            font-size: 20px;
-            margin-top: 0;
-        }
-        .info-box {
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }
-        .info-box p {
-            margin: 5px 0;
-        }
-        .button {
-            display: inline-block;
-            padding: 14px 30px;
-            margin: 20px 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: bold;
-            transition: transform 0.2s;
-        }
-        .button:hover {
-            transform: translateY(-2px);
-        }
-        .footer {
-            background: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #6c757d;
-            border-top: 1px solid #dee2e6;
-        }
-        .divider {
-            border: 0;
-            height: 1px;
-            background: #e0e0e0;
-            margin: 20px 0;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Приглашение на платформу — CRM LMS</title>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎓 CRM LMS</h1>
-        </div>
+<body style="margin:0;padding:0;background:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(59,130,246,0.10);">
 
-        <div class="content">
-            <h2>Вас пригласили на платформу!</h2>
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);padding:36px 40px;text-align:center;">
+              <div>
+                <span style="font-size:28px;">🎓</span>
+                <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;margin-left:10px;">CRM LMS</span>
+              </div>
+            </td>
+          </tr>
 
-            <p>Здравствуйте!</p>
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 40px 32px;">
 
-            <p><strong th:text="${inviterName}">Администратор</strong> пригласил вас присоединиться к платформе <strong>CRM LMS</strong>.</p>
+              <div style="text-align:center;margin-bottom:24px;">
+                <div style="display:inline-block;background:#eff6ff;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:30px;">🎉</div>
+              </div>
 
-            <div class="info-box">
-                <p><strong>Email для регистрации:</strong> <span th:text="${email}">your@email.com</span></p>
-                <p><strong>Назначенная роль:</strong> <span th:text="${role}">STUDENT</span></p>
-            </div>
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1e293b;text-align:center;">Вас пригласили!</h1>
+              <p style="margin:0 0 24px;font-size:15px;color:#64748b;text-align:center;">Здравствуйте!</p>
 
-            <p>Нажмите на кнопку ниже, чтобы начать регистрацию. Код приглашения будет автоматически заполнен:</p>
+              <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.7;text-align:center;">
+                <strong style="color:#1e293b;" th:text="${inviterName}">Администратор</strong> пригласил вас присоединиться к платформе <strong style="color:#2563eb;">CRM LMS</strong>.
+              </p>
 
-            <div style="text-align: center; margin: 30px 0;">
-                <a th:href="${registrationUrl}" class="button" style="font-size: 16px; color: white">
-                    📝 Зарегистрироваться
+              <!-- Info card -->
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 22px;margin:0 0 28px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-size:13px;color:#64748b;padding-bottom:8px;">📧 Email</td>
+                    <td style="font-size:14px;color:#1e293b;font-weight:600;text-align:right;padding-bottom:8px;" th:text="${email}">email@example.com</td>
+                  </tr>
+                  <tr>
+                    <td style="font-size:13px;color:#64748b;">👤 Роль</td>
+                    <td style="font-size:14px;color:#2563eb;font-weight:600;text-align:right;" th:text="${role}">STUDENT</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Button -->
+              <div style="text-align:center;margin-bottom:32px;">
+                <a th:href="${registrationUrl}"
+                   style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;border-radius:10px;box-shadow:0 4px 14px rgba(37,99,235,0.35);letter-spacing:0.3px;">
+                  Зарегистрироваться →
                 </a>
-            </div>
+              </div>
 
-            <hr class="divider">
+              <!-- Divider -->
+              <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 20px;" />
 
-            <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                <p style="margin: 0 0 10px 0; font-size: 14px; color: #6c757d;">
-                    <strong>Если кнопка не работает:</strong>
+              <!-- Fallback -->
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;">Если кнопка не работает, скопируйте ссылку:</p>
+              <p style="margin:0 0 16px;font-size:12px;word-break:break-all;">
+                <a th:href="${registrationUrl}" th:text="${registrationUrl}" style="color:#2563eb;text-decoration:none;">ссылка</a>
+              </p>
+              <p style="margin:0 0 24px;font-size:13px;color:#64748b;">
+                Или используйте код вручную: <code style="background:#f1f5f9;color:#2563eb;padding:2px 8px;border-radius:6px;font-size:13px;font-family:'Courier New',monospace;" th:text="${invitationToken}">CODE</code>
+              </p>
+
+              <div style="background:#fef9ec;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;">
+                <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">
+                  ⏳ Приглашение действительно в течение <strong>7 дней</strong>.
                 </p>
-                <p style="margin: 0 0 10px 0; font-size: 14px; color: #333;">
-                    1. Скопируйте эту ссылку: <a th:href="${registrationUrl}" th:text="${registrationUrl}" style="color: #667eea; word-break: break-all;">registration link</a>
-                </p>
-                <p style="margin: 0; font-size: 14px; color: #333;">
-                    2. Или используйте код вручную: <strong><span th:text="${invitationToken}" style="color: #667eea; font-family: 'Courier New', monospace; letter-spacing: 2px;">CODE</span></strong>
-                </p>
-            </div>
+              </div>
 
-            <p style="font-size: 14px; color: #6c757d;">
-                <strong>Важно:</strong> Приглашение действительно в течение 7 дней.
-            </p>
-        </div>
+            </td>
+          </tr>
 
-        <div class="footer">
-            <p>Это автоматическое сообщение, пожалуйста, не отвечайте на него.</p>
-            <p>&copy; 2025 CRM LMS. Все права защищены.</p>
-        </div>
-    </div>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:20px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+              <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Это автоматическое сообщение, пожалуйста, не отвечайте на него.</p>
+              <p style="margin:0;font-size:12px;color:#cbd5e1;">© 2025 CRM LMS. Все права защищены.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>

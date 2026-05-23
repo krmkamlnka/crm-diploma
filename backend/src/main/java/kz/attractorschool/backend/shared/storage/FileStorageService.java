@@ -28,6 +28,9 @@ public class FileStorageService {
     @Value("${minio.profile-photos-folder}")
     private String profilePhotosFolder;
 
+    @Value("${minio.chat-files-folder}")
+    private String chatFilesFolder;
+
     @Value("${minio.max-file-size}")
     private long maxFileSize;
 
@@ -74,6 +77,34 @@ public class FileStorageService {
 
         } catch (Exception e) {
             log.error("❌ Failed to upload profile photo: {}", e.getMessage(), e);
+            throw new RuntimeException("Не удалось загрузить файл: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Загрузить файл чата (любой тип, до 20MB)
+     */
+    public String uploadChatFile(MultipartFile file) {
+        try {
+            if (file == null || file.isEmpty()) throw new RuntimeException("Файл не может быть пустым");
+            if (file.getSize() > 20 * 1024 * 1024) throw new RuntimeException("Максимальный размер файла — 20 МБ");
+
+            String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+            String ext = getFileExtension(originalFilename);
+            String storedName = chatFilesFolder + "/" + UUID.randomUUID() + ext;
+
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(storedName)
+                            .stream(file.getInputStream(), file.getSize(), -1)
+                            .contentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream")
+                            .build()
+            );
+
+            return getFileUrl(storedName);
+        } catch (Exception e) {
+            log.error("Failed to upload chat file: {}", e.getMessage(), e);
             throw new RuntimeException("Не удалось загрузить файл: " + e.getMessage(), e);
         }
     }

@@ -197,10 +197,10 @@ export default function StudentDashboard() {
   }
 
   const stats = [
-    { label: t('student.dashboard.enrolledCourses'), value: String(enrollments.length), icon: BookOpen, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400' },
-    { label: t('student.dashboard.upcomingLessons'), value: String(upcomingLessons.length), icon: Calendar, bg: 'bg-emerald-50 dark:bg-emerald-900/20', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-    { label: t('student.dashboard.avgGrade'), value: avgGrade != null ? `${avgGrade}%` : '—', icon: Award, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400' },
-    { label: t('common.homework'), value: String(pendingHomework), icon: Clock, bg: 'bg-orange-50 dark:bg-orange-900/20', iconColor: 'text-orange-600 dark:text-orange-400' },
+    { label: t('student.dashboard.enrolledCourses'), value: String(enrollments.length), icon: BookOpen, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400', onClick: () => navigate('/student/grades') },
+    { label: t('student.dashboard.upcomingLessons'), value: String(upcomingLessons.length), icon: Calendar, bg: 'bg-emerald-50 dark:bg-emerald-900/20', iconColor: 'text-emerald-600 dark:text-emerald-400', onClick: () => navigate('/student/calendar') },
+    { label: t('student.dashboard.avgGrade'), value: avgGrade != null ? `${avgGrade}%` : '—', icon: Award, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400', onClick: () => navigate('/student/grades') },
+    { label: t('common.homework'), value: String(pendingHomework), icon: Clock, bg: 'bg-orange-50 dark:bg-orange-900/20', iconColor: 'text-orange-600 dark:text-orange-400', onClick: () => navigate('/student/deadlines') },
   ]
 
   const hour = new Date().getHours()
@@ -249,7 +249,7 @@ export default function StudentDashboard() {
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
           : stats.map((stat, i) => (
-            <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />
+            <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} onClick={stat.onClick} />
           ))
         }
       </div>

@@ -122,10 +122,11 @@ public class LessonService {
         User requestingUser = userRepository.findById(requestingUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Check permissions: admin, super_admin, or instructor of the course
+        // Check permissions: admin, super_admin, instructor of the course, or enrolled student
         boolean hasAccess = requestingUser.getRole() == UserRole.ADMIN
                 || requestingUser.getRole() == UserRole.SUPER_ADMIN
-                || lesson.getCourse().getInstructor().getId().equals(requestingUserId);
+                || lesson.getCourse().getInstructor().getId().equals(requestingUserId)
+                || studentRepository.existsByUserIdAndCourseId(requestingUserId, lesson.getCourse().getId());
 
         if (!hasAccess) {
             throw new ForbiddenException("You do not have access to this lesson");

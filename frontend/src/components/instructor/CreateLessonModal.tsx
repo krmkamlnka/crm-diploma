@@ -40,6 +40,9 @@ export default function CreateLessonModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const scheduledDateTime = new Date(`${selectedDate}T${time}:00`)
+  const isPast = scheduledDateTime < new Date()
+
   const handleMaterialFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     setMaterialFiles(prev => [...prev, ...files])
@@ -177,9 +180,15 @@ export default function CreateLessonModal({
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              className="input-field"
+              className={`input-field ${isPast ? 'border-red-400 dark:border-red-500 focus:ring-red-400' : ''}`}
               required
             />
+            {isPast && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400">
+                <span className="inline-block w-4 h-4 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center">!</span>
+                Нельзя создать занятие с датой и временем в прошлом
+              </p>
+            )}
           </div>
 
           <div>
@@ -379,7 +388,7 @@ export default function CreateLessonModal({
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isPast}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Создание...' : 'Создать занятие'}

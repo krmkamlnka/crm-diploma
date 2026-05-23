@@ -164,6 +164,20 @@ public class EmailService {
     }
 
     /**
+     * Отправить письмо со ссылкой сброса пароля
+     */
+    @Async
+    public void sendPasswordResetEmail(String to, String firstName, String resetToken) {
+        String resetUrl = frontendUrl + "/reset-password?token=" + resetToken;
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", firstName);
+        variables.put("resetUrl", resetUrl);
+
+        sendTemplatedEmail(to, "Сброс пароля — CRM LMS", "password-reset-email", variables);
+    }
+
+    /**
      * Отправить напоминание об оплате
      */
     @Async

@@ -1,16 +1,18 @@
 package kz.attractorschool.backend.ai;
 
 import jakarta.validation.Valid;
+import kz.attractorschool.backend.ai.dto.AiSessionDTO;
 import kz.attractorschool.backend.security.CustomUserDetails;
-import kz.attractorschool.backend.student.StudentRepository;
-import kz.attractorschool.backend.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -20,31 +22,90 @@ import java.util.UUID;
 public class AiAssistantController {
 
     private final GeminiService geminiService;
-    private final StudentRepository studentRepository;
+    private final AiHistoryService historyService;
 
-    /**
-     * POST /api/v1/student/ai/chat?enrollmentId={id}
-     * Отправить сообщение AI-ассистенту с контекстом конкретного курса
-     */
+    /** GET /api/v1/student/ai/sessions — список всех сессий */
+    @GetMapping("/sessions")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<List<AiSessionDTO>> getSessions(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(historyService.getSessions(userDetails.getId()));
+    }
+
+    /** GET /api/v1/student/ai/sessions/{id} — сессия с сообщениями */
+    @GetMapping("/sessions/{id}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<AiSessionDTO> getSession(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(historyService.getSession(id, userDetails.getId()));
+    }
+
+    /** POST /api/v1/student/ai/sessions — создать новую сессию */
+    @PostMapping("/sessions")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<AiSessionDTO> createSession(
+            @RequestParam UUID enrollmentId,
+            @RequestParam(required = false) UUID courseId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        AiChatSession session = historyService.createSession(
+                userDetails.getId(), enrollmentId, courseId, "Новый чат");
+        return ResponseEntity.status(HttpStatus.CREATED).body(AiSessionDTO.from(session, false));
+    }
+
+    /** DELETE /api/v1/student/ai/sessions/{id} — удалить сессию */
+    @DeleteMapping("/sessions/{id}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<Void> deleteSession(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        historyService.deleteSession(id, userDetails.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** DELETE /api/v1/student/ai/messages/{id} — удалить одно сообщение */
+    @DeleteMapping("/messages/{id}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<Void> deleteMessage(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        historyService.deleteMessage(id, userDetails.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** POST /api/v1/student/ai/chat?enrollmentId={id}&sessionId={id} — отправить сообщение */
     @PostMapping("/chat")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<AiChatResponse> chat(
+    public ResponseEntity<Map<String, Object>> chat(
             @RequestParam UUID enrollmentId,
+            @RequestParam(required = false) UUID sessionId,
             @Valid @RequestBody AiChatRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
-        log.info("POST /api/v1/student/ai/chat - enrollmentId={} user={}", enrollmentId, userDetails.getId());
+        log.info("POST /api/v1/student/ai/chat - enrollmentId={} sessionId={} user={}",
+                enrollmentId, sessionId, userDetails.getId());
 
-        // Проверяем, что enrollment принадлежит этому студенту
-        boolean owns = studentRepository.findById(enrollmentId)
-                .map(s -> s.getUser().getId().equals(userDetails.getId()))
-                .orElseThrow(() -> new ResourceNotFoundException("Enrollment not found"));
-
-        if (!owns) {
-            return ResponseEntity.status(403).build();
+        // Получить или создать сессию
+        AiChatSession session;
+        if (sessionId != null) {
+            session = historyService.getOrLoadSession(sessionId, userDetails.getId());
+        } else {
+            session = historyService.createSession(userDetails.getId(), enrollmentId, null, "Новый чат");
         }
 
+        // Сохранить сообщение пользователя
+        historyService.addMessage(session, "user", request.getMessage());
+
+        // Получить ответ AI
         String reply = geminiService.chat(userDetails.getId(), enrollmentId, request.getMessage());
-        return ResponseEntity.ok(new AiChatResponse(reply));
+
+        // Сохранить ответ AI
+        AiChatMessage aiMsg = historyService.addMessage(session, "ai", reply);
+
+        return ResponseEntity.ok(Map.of(
+                "reply", reply,
+                "sessionId", session.getId(),
+                "messageId", aiMsg.getId()
+        ));
     }
 }

@@ -9,7 +9,8 @@ interface Props {
   bg: string
   iconColor?: string
   delay?: number
-  trend?: number   // optional % change, e.g. +12
+  trend?: number
+  onClick?: () => void
 }
 
 // Map bg class → gradient for the icon container
@@ -22,7 +23,7 @@ const BG_GRADIENTS: Record<string, string> = {
   'bg-red-50 dark:bg-red-900/20':         'from-red-500 to-rose-500',
 }
 
-export default function AnimatedStatCard({ label, value, icon: Icon, bg, delay = 0, trend }: Props) {
+export default function AnimatedStatCard({ label, value, icon: Icon, bg, delay = 0, trend, onClick }: Props) {
   const [visible, setVisible] = useState(false)
 
   const parsed = parseFloat(value)
@@ -43,6 +44,7 @@ export default function AnimatedStatCard({ label, value, icon: Icon, bg, delay =
 
   return (
     <div
+      onClick={onClick}
       className={`relative overflow-hidden
                   bg-white/90 dark:bg-gray-900/80
                   backdrop-blur-xl
@@ -50,7 +52,8 @@ export default function AnimatedStatCard({ label, value, icon: Icon, bg, delay =
                   border border-white/70 dark:border-gray-700/50
                   shadow-[0_2px_8px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]
                   hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] hover:-translate-y-1
-                  transition-all duration-300 group cursor-default
+                  transition-all duration-300 group
+                  ${onClick ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'}
                   ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
       style={{ transitionDelay: visible ? '0ms' : `${delay}ms` }}
     >

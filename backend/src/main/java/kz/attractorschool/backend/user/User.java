@@ -1,6 +1,7 @@
 package kz.attractorschool.backend.user;
 
 import jakarta.persistence.*;
+import kz.attractorschool.backend.shared.encryption.EncryptedStringConverter;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -10,10 +11,6 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Сущность пользователя системы CRM LMS
- * Соответствует таблице users в БД
- */
 @Entity
 @Table(name = "users")
 @Getter
@@ -27,16 +24,24 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 255)
+    // Зашифровано в БД; поиск ведётся по email_hash
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    // Хеш email для быстрого поиска (HMAC-SHA256, не раскрывает оригинал)
+    @Column(name = "email_hash", nullable = false, unique = true, length = 64)
+    private String emailHash;
+
+    @Column(name = "password_hash", nullable = false, columnDefinition = "TEXT")
     private String passwordHash;
 
-    @Column(name = "first_name", nullable = false, length = 100)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "first_name", nullable = false, columnDefinition = "TEXT")
     private String firstName;
 
-    @Column(name = "last_name", nullable = false, length = 100)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "last_name", nullable = false, columnDefinition = "TEXT")
     private String lastName;
 
     @Enumerated(EnumType.STRING)
@@ -44,7 +49,8 @@ public class User {
     @Column(nullable = false)
     private UserRole role;
 
-    @Column(length = 20)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(columnDefinition = "TEXT")
     private String phone;
 
     @Column(name = "profile_photo_url", columnDefinition = "TEXT")
@@ -65,6 +71,12 @@ public class User {
 
     @Column(name = "email_verification_token_expires_at")
     private LocalDateTime emailVerificationTokenExpiresAt;
+
+    @Column(name = "password_reset_token", length = 255)
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_token_expires_at")
+    private LocalDateTime passwordResetTokenExpiresAt;
 
     @Column(name = "telegram_chat_id")
     private Long telegramChatId;

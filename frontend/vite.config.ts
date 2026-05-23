@@ -11,10 +11,16 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    allowedHosts: ['crm-platform.ngrok.app'],
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

@@ -83,10 +83,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Разрешить запросы с фронтенда (localhost:5173 для Vite dev server)
-        configuration.setAllowedOrigins(List.of(
+        configuration.setAllowedOriginPatterns(List.of(
                 "http://localhost:5173",
-                "http://localhost:3000"
+                "http://localhost:3000",
+                "https://*.ngrok.app",
+                "https://*.ngrok-free.app",
+                "https://*.ngrok.io"
         ));
 
         // Разрешить все HTTP методы

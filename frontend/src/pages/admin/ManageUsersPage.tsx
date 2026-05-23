@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search, BookOpen, Ban, Edit, RefreshCw, MoreVertical, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import EnrollStudentModal from '../../components/admin/EnrollStudentModal'
 import UserProfileModal from '../../components/admin/UserProfileModal'
 import api from '../../services/api'
@@ -37,23 +38,15 @@ const ROLE_COLORS: Record<UserRole, string> = {
   INSTRUCTOR: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400',
   STUDENT: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400',
 }
-const ROLE_LABELS: Record<UserRole, string> = {
-  SUPER_ADMIN: 'Супер-админ',
-  ADMIN: 'Админ',
-  INSTRUCTOR: 'Преподаватель',
-  STUDENT: 'Студент',
-}
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400',
   INACTIVE: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
   PENDING: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400',
 }
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: 'Активен', INACTIVE: 'Неактивен', PENDING: 'Ожидает',
-}
 
 export default function ManageUsersPage() {
+  const { t } = useTranslation()
   const { toasts, show: showToast, dismiss } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [filterRole, setFilterRole] = useState<string>('all')
@@ -84,7 +77,7 @@ export default function ManageUsersPage() {
       setTotalElements(res.data.totalElements)
       setTotalPages(res.data.totalPages)
     } catch {
-      showToast('Не удалось загрузить пользователей', 'error')
+      showToast(t('admin.users.loadError'), 'error')
     } finally {
       setIsLoading(false)
     }
@@ -96,9 +89,9 @@ export default function ManageUsersPage() {
     try {
       await api.patch(`/admin/users/${user.id}/status`, { status: newStatus })
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, status: newStatus } : u))
-      showToast(newStatus === 'ACTIVE' ? 'Пользователь активирован' : 'Пользователь деактивирован', 'success')
+      showToast(newStatus === 'ACTIVE' ? t('admin.users.activated') : t('admin.users.deactivated'), 'success')
     } catch {
-      showToast('Ошибка при изменении статуса', 'error')
+      showToast(t('admin.users.statusError'), 'error')
     }
   }
 
@@ -121,9 +114,9 @@ export default function ManageUsersPage() {
       })
       setUsers((prev) => prev.map((u) => u.id === editingUser.id ? res.data : u))
       setEditingUser(null)
-      showToast('Данные пользователя обновлены', 'success')
+      showToast(t('admin.users.userUpdated'), 'success')
     } catch (err: any) {
-      showToast(err?.response?.data?.message || 'Ошибка при сохранении', 'error')
+      showToast(err?.response?.data?.message || t('admin.users.saveError'), 'error')
     } finally {
       setEditLoading(false)
     }
@@ -139,6 +132,19 @@ export default function ManageUsersPage() {
   const startIndex = page * pageSize + 1
   const endIndex = Math.min((page + 1) * pageSize, totalElements)
 
+  const ROLE_LABELS: Record<UserRole, string> = {
+    SUPER_ADMIN: t('roles.SUPER_ADMIN'),
+    ADMIN: t('roles.ADMIN'),
+    INSTRUCTOR: t('roles.INSTRUCTOR'),
+    STUDENT: t('roles.STUDENT'),
+  }
+
+  const STATUS_LABELS: Record<string, string> = {
+    ACTIVE: t('common.active'),
+    INACTIVE: t('common.inactive'),
+    PENDING: t('common.pending'),
+  }
+
   return (
     <>
       <Toaster toasts={toasts} dismiss={dismiss} />
@@ -146,8 +152,8 @@ export default function ManageUsersPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between animate-fadeSlideDown">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Пользователи</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Управление пользователями системы</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('admin.users.pageTitle')}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('admin.users.pageSubtitle')}</p>
           </div>
           <button
             onClick={loadUsers}
@@ -155,7 +161,7 @@ export default function ManageUsersPage() {
             className="btn-secondary flex items-center gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Обновить
+            {t('admin.users.refresh')}
           </button>
         </div>
 
@@ -167,16 +173,16 @@ export default function ManageUsersPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по имени или email..."
+                placeholder={t('admin.users.searchPlaceholder')}
                 className="input-field pl-9"
               />
             </div>
             <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="input-field sm:w-48">
-              <option value="all">Все роли</option>
-              <option value="SUPER_ADMIN">Супер-админы</option>
-              <option value="ADMIN">Администраторы</option>
-              <option value="INSTRUCTOR">Преподаватели</option>
-              <option value="STUDENT">Студенты</option>
+              <option value="all">{t('admin.users.allRoles')}</option>
+              <option value="SUPER_ADMIN">{t('admin.users.filterSuperAdmins')}</option>
+              <option value="ADMIN">{t('admin.users.filterAdmins')}</option>
+              <option value="INSTRUCTOR">{t('admin.users.filterInstructors')}</option>
+              <option value="STUDENT">{t('admin.users.filterStudents')}</option>
             </select>
           </div>
 
@@ -184,8 +190,8 @@ export default function ManageUsersPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
-                  {['Пользователь', 'Роль', 'Статус', 'Регистрация', ''].map((h) => (
-                    <th key={h} className={`py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide ${h === '' ? 'text-right' : 'text-left'}`}>
+                  {[t('admin.users.colUser'), t('admin.users.colRole'), t('admin.users.colStatus'), t('admin.users.colRegistration'), ''].map((h, i) => (
+                    <th key={i} className={`py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide ${h === '' ? 'text-right' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
@@ -199,8 +205,8 @@ export default function ManageUsersPage() {
                     <td colSpan={5}>
                       <EmptyState
                         icon={Users}
-                        title={searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
-                        description={searchQuery ? 'Попробуйте изменить запрос' : undefined}
+                        title={searchQuery ? t('admin.users.notFound') : t('admin.users.noUsers')}
+                        description={searchQuery ? t('admin.users.tryChangeQuery') : undefined}
                       />
                     </td>
                   </tr>
@@ -244,7 +250,7 @@ export default function ManageUsersPage() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(user.createdAt).toLocaleDateString('ru-RU')}
+                        {new Date(user.createdAt).toLocaleDateString()}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="relative inline-block">
@@ -265,14 +271,14 @@ export default function ManageUsersPage() {
                                   onClick={() => { setSelectedStudent(user); setOpenMenuId(null) }}
                                   className="w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
                                 >
-                                  <BookOpen className="w-4 h-4" /> Записать на курс
+                                  <BookOpen className="w-4 h-4" /> {t('admin.users.enrollStudent')}
                                 </button>
                               )}
                               <button
                                 onClick={() => openEdit(user)}
                                 className="w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
                               >
-                                <Edit className="w-4 h-4" /> Редактировать
+                                <Edit className="w-4 h-4" /> {t('common.edit')}
                               </button>
                               <button
                                 onClick={() => handleToggleStatus(user)}
@@ -283,7 +289,7 @@ export default function ManageUsersPage() {
                                 }`}
                               >
                                 <Ban className="w-4 h-4" />
-                                {user.status === 'ACTIVE' ? 'Деактивировать' : 'Активировать'}
+                                {user.status === 'ACTIVE' ? t('admin.users.deactivate') : t('admin.users.activate')}
                               </button>
                             </div>
                           )}
@@ -299,7 +305,7 @@ export default function ManageUsersPage() {
           {!isLoading && totalElements > 0 && (
             <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100 dark:border-gray-800">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {startIndex}–{endIndex} из {totalElements}
+                {startIndex}–{endIndex} {t('common.of')} {totalElements}
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -352,34 +358,34 @@ export default function ManageUsersPage() {
       )}
 
       {editingUser && (
-        <Modal title="Редактировать пользователя" onClose={() => setEditingUser(null)}>
+        <Modal title={t('admin.users.editUser')} onClose={() => setEditingUser(null)}>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Имя" required>
+              <FormField label={t('common.firstName')} required>
                 <input type="text" value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} className="input-field" />
               </FormField>
-              <FormField label="Фамилия" required>
+              <FormField label={t('common.lastName')} required>
                 <input type="text" value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} className="input-field" />
               </FormField>
             </div>
-            <FormField label="Email">
+            <FormField label={t('common.email')}>
               <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="input-field" />
             </FormField>
-            <FormField label="Телефон">
+            <FormField label={t('common.phone')}>
               <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="input-field" placeholder="+7XXXXXXXXXX" />
             </FormField>
-            <FormField label="Роль">
+            <FormField label={t('common.role')}>
               <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })} className="input-field">
-                <option value="STUDENT">Студент</option>
-                <option value="INSTRUCTOR">Преподаватель</option>
-                <option value="ADMIN">Администратор</option>
-                <option value="SUPER_ADMIN">Супер-администратор</option>
+                <option value="STUDENT">{t('roles.STUDENT')}</option>
+                <option value="INSTRUCTOR">{t('roles.INSTRUCTOR')}</option>
+                <option value="ADMIN">{t('roles.ADMIN')}</option>
+                <option value="SUPER_ADMIN">{t('admin.users.roleSuperAdmin')}</option>
               </select>
             </FormField>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setEditingUser(null)} className="btn-secondary flex-1">Отмена</button>
+              <button onClick={() => setEditingUser(null)} className="btn-secondary flex-1">{t('common.cancel')}</button>
               <button onClick={handleSaveEdit} disabled={editLoading} className="btn-primary flex-1 disabled:opacity-50">
-                {editLoading ? 'Сохранение...' : 'Сохранить'}
+                {editLoading ? t('admin.users.saving') : t('common.save')}
               </button>
             </div>
           </div>

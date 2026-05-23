@@ -2,6 +2,7 @@ package kz.attractorschool.backend.payment;
 
 import jakarta.persistence.*;
 import kz.attractorschool.backend.course.Course;
+import kz.attractorschool.backend.shared.encryption.EncryptedStringConverter;
 import kz.attractorschool.backend.user.User;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -59,12 +60,15 @@ public class StudentPayment {
     @Column(name = "period_year")
     private Integer periodYear;
 
-    @Column(name = "transaction_id")
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "transaction_id", columnDefinition = "TEXT")
     private String transactionId;
 
-    @Column(name = "payment_method")
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "payment_method", columnDefinition = "TEXT")
     private String paymentMethod;
 
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(columnDefinition = "TEXT")
     private String note;
 

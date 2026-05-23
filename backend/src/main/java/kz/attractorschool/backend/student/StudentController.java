@@ -56,4 +56,19 @@ public class StudentController {
         StudentPerformanceResponse student = studentService.getStudentDetails(studentId, userDetails.getId());
         return ResponseEntity.ok(student);
     }
+
+    /**
+     * Получить детальную информацию о студенте по userId
+     * GET /api/v1/instructor/students/by-user/{userId}
+     */
+    @GetMapping("/by-user/{userId}")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<StudentPerformanceResponse> getStudentDetailsByUserId(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        log.info("GET /api/v1/instructor/students/by-user/{} - requesting user: {}", userId, userDetails.getId());
+        StudentPerformanceResponse student = studentService.getStudentDetailsByUserId(userId, userDetails.getId());
+        return ResponseEntity.ok(student);
+    }
 }

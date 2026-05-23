@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Video, CheckCircle, XCircle, ExternalLink, Pencil, Paperclip, Trash2, BookOpen, Github, Star, RotateCcw, Plus } from 'lucide-react'
+import { X, Video, CheckCircle, ExternalLink, Pencil, Paperclip, Trash2, BookOpen, Github, Star, RotateCcw, Plus } from 'lucide-react'
 import api from '../../services/api'
 
 interface LessonDetailModalProps {
@@ -98,6 +98,9 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
   const [editDescription, setEditDescription] = useState('')
   const [editDate, setEditDate] = useState(lesson.scheduledAt.slice(0, 10))
   const [editTime, setEditTime] = useState(lesson.scheduledAt.slice(11, 16))
+
+  const editScheduledDateTime = new Date(`${editDate}T${editTime}:00`)
+  const editIsPast = editScheduledDateTime < new Date()
   const [editDuration, setEditDuration] = useState(String(lesson.durationMinutes ?? 120))
   const [editLocation, setEditLocation] = useState(lesson.location ?? '')
   const [editOnlineUrl, setEditOnlineUrl] = useState(lesson.onlineMeetingUrl ?? '')
@@ -492,10 +495,16 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
                     required
                     value={editTime}
                     onChange={(e) => setEditTime(e.target.value)}
-                    className="input-field"
+                    className={`input-field ${editIsPast ? 'border-red-400 dark:border-red-500' : ''}`}
                   />
                 </div>
               </div>
+              {editIsPast && (
+                <p className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400 -mt-2">
+                  <span className="inline-flex w-4 h-4 rounded-full bg-red-100 dark:bg-red-900/40 items-center justify-center text-xs font-bold shrink-0">!</span>
+                  Нельзя сохранить занятие с датой и временем в прошлом
+                </p>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Длительность (минут)
@@ -752,7 +761,7 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={isSaving} className="btn-primary flex-1 disabled:opacity-50">
+                <button type="submit" disabled={isSaving || editIsPast} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
                   {isSaving ? 'Сохранение...' : 'Сохранить'}
                 </button>
                 <button
@@ -880,20 +889,21 @@ export default function LessonDetailModal({ lesson, onClose, onSave }: LessonDet
                                   </span>
                                 )}
                                 {/* Посещаемость */}
-                                <button
-                                  onClick={() => toggleAttendance(student.userId)}
-                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                                    attendance[student.userId] === 'PRESENT'
-                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
-                                      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
-                                  }`}
-                                >
-                                  {attendance[student.userId] === 'PRESENT' ? (
-                                    <><CheckCircle className="w-4 h-4" />Присутствовал</>
-                                  ) : (
-                                    <><XCircle className="w-4 h-4" />Отсутствовал</>
-                                  )}
-                                </button>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                  <span className="text-sm text-gray-500 dark:text-gray-400">Посещаемость</span>
+                                  <div
+                                    onClick={() => toggleAttendance(student.userId)}
+                                    className={`relative w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${
+                                      attendance[student.userId] === 'PRESENT'
+                                        ? 'bg-emerald-500 border-emerald-500'
+                                        : 'bg-transparent border-gray-400 dark:border-gray-500 hover:border-emerald-400'
+                                    }`}
+                                  >
+                                    {attendance[student.userId] === 'PRESENT' && (
+                                      <CheckCircle className="w-3.5 h-3.5 text-white" />
+                                    )}
+                                  </div>
+                                </label>
                               </div>
                             </div>
 

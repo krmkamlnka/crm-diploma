@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next'
 import {
   Home, Users, BookOpen, Calendar, GraduationCap,
   MessageSquare, CreditCard, UserPlus, Settings,
-  Sparkles, BarChart2, Clock, X,
+  Sparkles, BarChart2, Clock, X, MessagesSquare,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { UserRole } from '../../types'
+import { useState, useEffect } from 'react'
+import api from '../../services/api'
 
 interface Props {
   open: boolean
@@ -48,31 +50,34 @@ export default function Sidebar({ open, onClose }: Props) {
       case 'SUPER_ADMIN':
       case 'ADMIN':
         return [
-          { icon: Home,        label: t('nav.home'),        path: '/admin' },
-          { icon: UserPlus,    label: t('nav.invite'),      path: '/admin/invite' },
-          { icon: Users,       label: t('nav.users'),       path: '/admin/users' },
-          { icon: CreditCard,  label: t('nav.payments'),    path: '/admin/payments' },
-          { icon: Settings,    label: t('nav.settings'),    path: '/admin/settings' },
+          { icon: Home,          label: t('nav.home'),        path: '/admin' },
+          { icon: UserPlus,      label: t('nav.invite'),      path: '/admin/invite' },
+          { icon: Users,         label: t('nav.users'),       path: '/admin/users' },
+          { icon: CreditCard,    label: t('nav.payments'),    path: '/admin/payments' },
+          { icon: MessagesSquare, label: t('nav.chat'),       path: '/chat', badge: true },
+          { icon: Settings,      label: t('nav.settings'),    path: '/admin/settings' },
         ]
       case 'INSTRUCTOR':
         return [
-          { icon: Home,           label: t('nav.home'),        path: '/instructor' },
-          { icon: BookOpen,       label: t('nav.courses'),     path: '/instructor/courses' },
-          { icon: Users,          label: t('nav.students'),    path: '/instructor/students' },
-          { icon: Calendar,       label: t('nav.calendar'),    path: '/instructor/calendar' },
-          { icon: BarChart2,      label: t('nav.analytics'),   path: '/instructor/analytics' },
-          { icon: MessageSquare,  label: t('nav.aiAssistant'), path: '/instructor/ai-assistant' },
-          { icon: Settings,       label: t('nav.settings'),    path: '/instructor/settings' },
+          { icon: Home,             label: t('nav.home'),        path: '/instructor' },
+          { icon: BookOpen,         label: t('nav.courses'),     path: '/instructor/courses' },
+          { icon: Users,            label: t('nav.students'),    path: '/instructor/students' },
+          { icon: Calendar,         label: t('nav.calendar'),    path: '/instructor/calendar' },
+          { icon: BarChart2,        label: t('nav.analytics'),   path: '/instructor/analytics' },
+          { icon: MessageSquare,    label: t('nav.aiAssistant'), path: '/instructor/ai-assistant' },
+          { icon: MessagesSquare,   label: t('nav.chat'),        path: '/chat', badge: true },
+          { icon: Settings,         label: t('nav.settings'),    path: '/instructor/settings' },
         ]
       case 'STUDENT':
         return [
-          { icon: Home,          label: t('nav.home'),        path: '/student' },
-          { icon: Calendar,      label: t('nav.calendar'),    path: '/student/calendar' },
-          { icon: GraduationCap, label: t('nav.grades'),      path: '/student/grades' },
-          { icon: Clock,         label: t('nav.deadlines'),   path: '/student/deadlines' },
-          { icon: MessageSquare, label: t('nav.aiAssistant'), path: '/student/ai-assistant' },
-          { icon: CreditCard,    label: t('nav.payments'),    path: '/student/payments' },
-          { icon: Settings,      label: t('nav.settings'),    path: '/student/settings' },
+          { icon: Home,             label: t('nav.home'),        path: '/student' },
+          { icon: Calendar,         label: t('nav.calendar'),    path: '/student/calendar' },
+          { icon: GraduationCap,    label: t('nav.grades'),      path: '/student/grades' },
+          { icon: Clock,            label: t('nav.deadlines'),   path: '/student/deadlines' },
+          { icon: MessageSquare,    label: t('nav.aiAssistant'), path: '/student/ai-assistant' },
+          { icon: MessagesSquare,   label: t('nav.chat'),        path: '/chat', badge: true },
+          { icon: CreditCard,       label: t('nav.payments'),    path: '/student/payments' },
+          { icon: Settings,         label: t('nav.settings'),    path: '/student/settings' },
         ]
       default:
         return []
@@ -81,6 +86,19 @@ export default function Sidebar({ open, onClose }: Props) {
 
   const navItems = getNavItems()
   const accent = getRoleAccent(user?.role)
+
+  const [unreadChat, setUnreadChat] = useState(0)
+  useEffect(() => {
+    api.get<{ count: number }>('/chat/unread-count')
+      .then((r) => setUnreadChat(r.data.count))
+      .catch(() => {})
+    const timer = setInterval(() => {
+      api.get<{ count: number }>('/chat/unread-count')
+        .then((r) => setUnreadChat(r.data.count))
+        .catch(() => {})
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [])
 
   return (
     <aside
@@ -128,6 +146,7 @@ export default function Sidebar({ open, onClose }: Props) {
         {navItems.map((item, i) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
+          const badgeCount = (item as any).badge ? unreadChat : 0
 
           return (
             <Link
@@ -158,6 +177,11 @@ export default function Sidebar({ open, onClose }: Props) {
                 <Icon size={16} />
               </div>
               <span className="truncate">{item.label}</span>
+              {badgeCount > 0 && !isActive && (
+                <span className="ml-auto bg-primary-600 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              )}
               {isActive && (
                 <span className={`ml-auto w-1.5 h-1.5 rounded-full bg-gradient-to-b ${accent} shadow-sm`} />
               )}

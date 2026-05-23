@@ -27,19 +27,24 @@ interface EnrollStudentModalProps {
 
 export default function EnrollStudentModal({ student, onClose }: EnrollStudentModalProps) {
   const [selectedCourses, setSelectedCourses] = useState<string[]>([])
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([])
   const [availableCourses, setAvailableCourses] = useState<Course[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    loadCourses()
+    loadData()
   }, [])
 
-  const loadCourses = async () => {
+  const loadData = async () => {
     try {
-      const response = await api.get<Course[]>('/admin/courses')
-      setAvailableCourses(response.data || [])
+      const [coursesRes, enrolledRes] = await Promise.all([
+        api.get<Course[]>('/admin/courses'),
+        api.get<string[]>(`/admin/users/${student.id}/enrolled-courses`).catch(() => ({ data: [] as string[] }))
+      ])
+      setAvailableCourses(coursesRes.data || [])
+      setEnrolledCourseIds(enrolledRes.data || [])
     } catch (err) {
       console.error('Failed to load courses:', err)
       setError('Не удалось загрузить список курсов')
@@ -114,20 +119,24 @@ export default function EnrollStudentModal({ student, onClose }: EnrollStudentMo
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {availableCourses.map((course) => {
+                const isEnrolled = enrolledCourseIds.includes(course.id)
                 const isSelected = selectedCourses.includes(course.id)
                 return (
                   <label
                     key={course.id}
-                    className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                      isEnrolled
+                        ? 'border-green-400 bg-green-50 dark:bg-green-900/20 cursor-not-allowed opacity-75'
+                        : isSelected
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 cursor-pointer'
+                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
                     }`}
                   >
                     <input
                       type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleCourse(course.id)}
+                      checked={isEnrolled || isSelected}
+                      disabled={isEnrolled}
+                      onChange={() => !isEnrolled && toggleCourse(course.id)}
                       className="w-5 h-5 text-primary-600 rounded"
                     />
                     <div className="flex-1">
@@ -138,7 +147,12 @@ export default function EnrollStudentModal({ student, onClose }: EnrollStudentMo
                         </p>
                       )}
                     </div>
-                    {isSelected && (
+                    {isEnrolled && (
+                      <span className="px-3 py-1 bg-green-600 text-white rounded-full text-xs font-medium">
+                        Уже записан
+                      </span>
+                    )}
+                    {!isEnrolled && isSelected && (
                       <span className="px-3 py-1 bg-primary-600 text-white rounded-full text-xs font-medium">
                         Выбран
                       </span>

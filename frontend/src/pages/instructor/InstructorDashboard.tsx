@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { BookOpen, Users, Calendar, Clock, ExternalLink, ChevronRight, FileText, GraduationCap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
@@ -52,15 +53,18 @@ interface UpcomingLesson extends LessonResponse {
 export default function InstructorDashboard() {
   const { user } = useAuthStore()
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const dateLocale = i18n.language === 'kk' ? 'kk-KZ' : i18n.language === 'en' ? 'en-US' : 'ru-RU'
   const [isLoading, setIsLoading] = useState(true)
   const [courseCount, setCourseCount] = useState(0)
+  const [courses, setCourses] = useState<CourseResponse[]>([])
   const [totalStudents, setTotalStudents] = useState(0)
   const [lessonsThisMonth, setLessonsThisMonth] = useState(0)
   const [upcomingLessons, setUpcomingLessons] = useState<UpcomingLesson[]>([])
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([])
   const [selectedLesson, setSelectedLesson] = useState<LessonResponse | null>(null)
   const [loadingLessonId, setLoadingLessonId] = useState<string | null>(null)
+  const [showCoursesTooltip, setShowCoursesTooltip] = useState(false)
 
   useEffect(() => {
     loadDashboardData()
@@ -75,6 +79,7 @@ export default function InstructorDashboard() {
       ])
       const courses = coursesResponse.data.content
 
+      setCourses(courses)
       setCourseCount(courses.length)
       setTotalStudents(courses.reduce((sum, c) => sum + (c.enrolledStudents || 0), 0))
       setPendingSubmissions(pendingResponse.data)
@@ -161,12 +166,23 @@ export default function InstructorDashboard() {
             <p className="text-primary-100/70 text-sm mt-1">{t('instructor.dashboard.subtitle')}</p>
           </div>
           {!isLoading && (
-            <div className="text-center bg-white/15 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/20 shrink-0">
+            <div
+              onClick={() => navigate('/instructor/students')}
+              className="text-center bg-white/15 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/20 shrink-0
+                         cursor-pointer group
+                         hover:bg-white/25 hover:border-white/40 hover:scale-105
+                         active:scale-95
+                         transition-all duration-200"
+            >
               <div className="flex items-center gap-1.5 justify-center mb-0.5">
-                <GraduationCap className="w-4 h-4 text-cyan-200" />
-                <span className="text-xs text-primary-100/70 font-medium">{t('instructor.dashboard.totalStudents')}</span>
+                <GraduationCap className="w-4 h-4 text-cyan-200 group-hover:text-white transition-colors" />
+                <span className="text-xs text-primary-100/70 font-medium group-hover:text-white/90 transition-colors">
+                  {t('instructor.dashboard.totalStudents')}
+                </span>
               </div>
-              <p className="text-3xl font-bold">{totalStudents}</p>
+              <p className="text-3xl font-bold group-hover:scale-110 transition-transform duration-200 inline-block">
+                {totalStudents}
+              </p>
             </div>
           )}
         </div>
@@ -175,7 +191,43 @@ export default function InstructorDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-          : stats.map((stat, i) => <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />)
+          : stats.map((stat, i) => i === 0 ? (
+            <div
+              key={stat.label}
+              className="relative cursor-pointer"
+              onClick={() => navigate('/instructor/courses')}
+              onMouseEnter={() => setShowCoursesTooltip(true)}
+              onMouseLeave={() => setShowCoursesTooltip(false)}
+            >
+              <AnimatedStatCard {...stat} delay={i * 80} />
+              {showCoursesTooltip && courses.length > 0 && (
+                <div className="absolute top-full left-0 mt-2 z-50 w-64
+                                bg-white dark:bg-gray-800
+                                border border-gray-200 dark:border-gray-700
+                                rounded-2xl shadow-xl p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-1 mb-2">
+                    Мои курсы
+                  </p>
+                  {courses.map(c => (
+                    <div key={c.id} className="flex items-center justify-between px-2 py-1.5 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                      <span className="text-sm text-gray-800 dark:text-gray-100 font-medium truncate mr-2">{c.name}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-400 shrink-0">{c.enrolledStudents} студ.</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : i === 1 ? (
+            <div
+              key={stat.label}
+              className="cursor-pointer"
+              onClick={() => navigate('/instructor/students')}
+            >
+              <AnimatedStatCard {...stat} delay={i * 80} />
+            </div>
+          ) : (
+            <AnimatedStatCard key={stat.label} {...stat} delay={i * 80} />
+          ))
         }
       </div>
 

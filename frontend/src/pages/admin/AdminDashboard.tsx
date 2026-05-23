@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Users, UserPlus, GraduationCap, TrendingUp, Shield } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../services/api'
@@ -7,6 +8,9 @@ import AnimatedProgressBar from '../../components/common/AnimatedProgressBar'
 import { StatCardSkeleton, ListItemSkeleton } from '../../components/common/Skeleton'
 import { useAuthStore } from '../../context/authStore'
 import UserProfileModal from '../../components/admin/UserProfileModal'
+import EnrollStudentModal from '../../components/admin/EnrollStudentModal'
+import Modal from '../../components/common/Modal'
+import FormField from '../../components/common/FormField'
 import { UserRole } from '../../types'
 
 interface RecentUser {
@@ -49,9 +53,14 @@ const getRoleBadgeClass = (role: string) => {
 
 export default function AdminDashboard() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileUser, setProfileUser] = useState<RecentUser | null>(null)
+  const [selectedStudent, setSelectedStudent] = useState<RecentUser | null>(null)
+  const [editingUser, setEditingUser] = useState<RecentUser | null>(null)
+  const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '', phone: '', role: '' as UserRole })
+  const [editLoading, setEditLoading] = useState(false)
   const [courseTooltip, setCourseTooltip] = useState(false)
   const courseCardRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
@@ -64,20 +73,45 @@ export default function AdminDashboard() {
   }, [])
 
   const stats = data ? [
-    { label: t('admin.dashboard.totalUsers'), value: String(data.totalUsers), icon: Users, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400' },
+    { label: t('admin.dashboard.totalUsers'), value: String(data.totalUsers), icon: Users, bg: 'bg-blue-50 dark:bg-blue-900/20', iconColor: 'text-blue-600 dark:text-blue-400', onClick: () => navigate('/admin/users') },
     { label: t('admin.dashboard.newThisMonth'), value: String(data.newRegistrationsThisMonth), icon: UserPlus, bg: 'bg-emerald-50 dark:bg-emerald-900/20', iconColor: 'text-emerald-600 dark:text-emerald-400' },
     { label: t('admin.dashboard.totalCourses'), value: String(data.activeCourses), icon: GraduationCap, bg: 'bg-violet-50 dark:bg-violet-900/20', iconColor: 'text-violet-600 dark:text-violet-400' },
     { label: t('admin.dashboard.growth'), value: `${data.growthPercent}%`, icon: TrendingUp, bg: 'bg-orange-50 dark:bg-orange-900/20', iconColor: 'text-orange-600 dark:text-orange-400' },
   ] : []
 
   const bars = data ? [
-    { label: t('common.active'), value: data.activeUsersPercent, color: 'bg-emerald-500' },
-    { label: t('common.courses'), value: data.courseFillPercent, color: 'bg-blue-500' },
-    { label: t('common.payments'), value: data.paidInvoicesPercent, color: 'bg-violet-500' },
+    { label: t('admin.dashboard.courseFillRate'), value: data.courseFillPercent, color: 'bg-blue-500' },
+    { label: t('admin.dashboard.paidInvoices'), value: data.paidInvoicesPercent, color: 'bg-violet-500' },
+    { label: t('admin.dashboard.activeAccounts'), value: data.activeUsersPercent, color: 'bg-emerald-500' },
   ] : []
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? t('common.goodMorning') : hour < 18 ? t('common.goodAfternoon') : t('common.goodEvening')
+
+  const openEdit = (user: RecentUser) => {
+    setEditingUser(user)
+    setEditForm({ firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone ?? '', role: user.role })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingUser) return
+    setEditLoading(true)
+    try {
+      const res = await api.patch<RecentUser>(`/admin/users/${editingUser.id}`, {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        email: editForm.email,
+        phone: editForm.phone || undefined,
+        role: editForm.role,
+      })
+      setData(prev => prev ? {
+        ...prev,
+        recentRegistrations: prev.recentRegistrations.map(u => u.id === editingUser.id ? res.data : u)
+      } : prev)
+      setEditingUser(null)
+    } catch { /* ignore */ }
+    finally { setEditLoading(false) }
+  }
 
   return (
     <>
@@ -222,7 +256,7 @@ export default function AdminDashboard() {
       <UserProfileModal
         user={profileUser}
         onClose={() => setProfileUser(null)}
-        onEdit={() => setProfileUser(null)}
+        onEdit={(u) => { setProfileUser(null); openEdit(u) }}
         onToggleStatus={async (u) => {
           const newStatus = u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
           try {
@@ -234,8 +268,47 @@ export default function AdminDashboard() {
             setProfileUser(prev => prev?.id === u.id ? { ...prev, status: newStatus } : prev)
           } catch { /* ignore */ }
         }}
-        onEnroll={() => setProfileUser(null)}
+        onEnroll={(u) => { setProfileUser(null); setSelectedStudent(u) }}
       />
+    )}
+
+    {selectedStudent && (
+      <EnrollStudentModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />
+    )}
+
+    {editingUser && (
+      <Modal title="Редактировать пользователя" onClose={() => setEditingUser(null)}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Имя" required>
+              <input type="text" value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} className="input-field" />
+            </FormField>
+            <FormField label="Фамилия" required>
+              <input type="text" value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} className="input-field" />
+            </FormField>
+          </div>
+          <FormField label="Email">
+            <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Телефон">
+            <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="input-field" placeholder="+7XXXXXXXXXX" />
+          </FormField>
+          <FormField label="Роль">
+            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })} className="input-field">
+              <option value="STUDENT">Студент</option>
+              <option value="INSTRUCTOR">Преподаватель</option>
+              <option value="ADMIN">Администратор</option>
+              <option value="SUPER_ADMIN">Супер-администратор</option>
+            </select>
+          </FormField>
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setEditingUser(null)} className="btn-secondary flex-1">Отмена</button>
+            <button onClick={handleSaveEdit} disabled={editLoading} className="btn-primary flex-1 disabled:opacity-50">
+              {editLoading ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     )}
     </>
   )

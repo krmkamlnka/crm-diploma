@@ -3,6 +3,7 @@ package kz.attractorschool.backend.invitation;
 import kz.attractorschool.backend.invitation.dto.CreateInvitationRequest;
 import kz.attractorschool.backend.invitation.dto.InvitationResponse;
 import kz.attractorschool.backend.shared.email.EmailService;
+import kz.attractorschool.backend.shared.encryption.EmailHashUtil;
 import kz.attractorschool.backend.user.User;
 import kz.attractorschool.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class InvitationService {
     private final InvitationRepository invitationRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final EmailHashUtil emailHashUtil;
 
     /**
      * Создать новое приглашение
@@ -35,27 +37,25 @@ public class InvitationService {
         log.info("Creating invitation for email: {}, role: {}, invitedBy: {}",
                 request.getEmail(), request.getRole(), invitedById);
 
-        // Проверка: пользователь с таким email уже зарегистрирован
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Пользователь с email " + request.getEmail() + " уже существует");
+        String emailHash = emailHashUtil.hash(request.getEmail());
+
+        if (userRepository.existsByEmailHash(emailHash)) {
+            throw new RuntimeException("Пользователь с таким email уже существует");
         }
 
-        // Проверка: активное приглашение для этого email уже существует
-        if (invitationRepository.existsByEmailAndIsUsedFalse(request.getEmail())) {
-            throw new RuntimeException("Активное приглашение для " + request.getEmail() + " уже существует");
+        if (invitationRepository.existsByEmailHashAndIsUsedFalse(emailHash)) {
+            throw new RuntimeException("Активное приглашение для этого email уже существует");
         }
 
-        // Найти пользователя, который создает приглашение
         User inviter = userRepository.findById(invitedById)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        // Генерация уникального токена и срока действия
         String token = UUID.randomUUID().toString();
-        LocalDateTime expiresAt = LocalDateTime.now().plusDays(7); // Токен действителен 7 дней
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(7);
 
-        // Создание приглашения
         Invitation invitation = Invitation.builder()
                 .email(request.getEmail())
+                .emailHash(emailHash)
                 .role(request.getRole())
                 .token(token)
                 .invitedBy(inviter)

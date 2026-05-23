@@ -20,7 +20,7 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
     @Query("SELECT COUNT(s) > 0 FROM Student s WHERE s.user.id = :userId AND s.course.id = :courseId")
     boolean existsByUserIdAndCourseId(@Param("userId") UUID userId, @Param("courseId") UUID courseId);
 
-    @Query("SELECT s FROM Student s LEFT JOIN FETCH s.user LEFT JOIN FETCH s.course WHERE s.id = :id")
+    @Query("SELECT s FROM Student s LEFT JOIN FETCH s.user LEFT JOIN FETCH s.course c LEFT JOIN FETCH c.instructor WHERE s.id = :id")
     Optional<Student> findByIdWithDetails(@Param("id") UUID id);
 
     @Query("SELECT s FROM Student s LEFT JOIN FETCH s.user LEFT JOIN FETCH s.course WHERE s.user.id = :userId")

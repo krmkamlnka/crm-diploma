@@ -5,6 +5,7 @@ import kz.attractorschool.backend.user.UserRepository;
 import kz.attractorschool.backend.user.UserRole;
 import kz.attractorschool.backend.user.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * Запускается автоматически при старте приложения
  */
 @Component
+@Profile("!test")
 @RequiredArgsConstructor
 @Slf4j
 public class DataSeeder implements CommandLineRunner {

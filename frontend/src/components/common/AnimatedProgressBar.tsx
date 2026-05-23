@@ -5,6 +5,7 @@ interface Props {
   value: number
   color: string
   delay?: number
+  description?: string
 }
 
 const COLOR_GRADIENTS: Record<string, string> = {
@@ -15,7 +16,7 @@ const COLOR_GRADIENTS: Record<string, string> = {
   'bg-red-500':     'from-red-400 to-rose-500',
 }
 
-export default function AnimatedProgressBar({ label, value, color, delay = 0 }: Props) {
+export default function AnimatedProgressBar({ label, value, color, delay = 0, description }: Props) {
   const [width, setWidth] = useState(0)
 
   useEffect(() => {
@@ -34,17 +35,27 @@ export default function AnimatedProgressBar({ label, value, color, delay = 0 }: 
           {value}%
         </span>
       </div>
-      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden
-                      shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]">
-        <div
-          className={`h-2 rounded-full bg-gradient-to-r ${gradient}
-                       transition-all duration-1000 ease-out relative overflow-hidden`}
-          style={{ width: `${width}%` }}
-        >
-          {/* Shimmer */}
-          <div className="absolute inset-0 bg-shimmer-light dark:bg-shimmer-dark
-                          bg-[length:200%_100%] animate-shimmer opacity-60" />
+      <div className="relative">
+        <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden
+                        shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] cursor-pointer">
+          <div
+            className={`h-2 rounded-full bg-gradient-to-r ${gradient}
+                         transition-all duration-1000 ease-out relative overflow-hidden`}
+            style={{ width: `${width}%` }}
+          >
+            <div className="absolute inset-0 bg-shimmer-light dark:bg-shimmer-dark
+                            bg-[length:200%_100%] animate-shimmer opacity-60" />
+          </div>
         </div>
+        {description && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                          px-3 py-1.5 rounded-lg text-xs text-white bg-gray-800 dark:bg-gray-700
+                          whitespace-nowrap shadow-lg pointer-events-none
+                          opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+            {description}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
+          </div>
+        )}
       </div>
     </div>
   )
