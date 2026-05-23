@@ -113,7 +113,7 @@ logging:
 # OpenRouter AI
 openrouter:
   api:
-    key: ${OPENROUTER_API_KEY:your-openrouter-api-key-here}
+    key: ${OPENROUTER_API_KEY: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}
 
 # Telegram Bot
 telegram:
